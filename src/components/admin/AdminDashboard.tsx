@@ -6,6 +6,8 @@ import { EditOfficeModal } from './EditOfficeModal';
 import { EditEmployeeModal } from './EditEmployeeModal';
 import { CorrectionModal } from './CorrectionModal';
 import { ImportEmployeesModal } from './ImportEmployeesModal';
+import { GoogleSheetsDbManager } from './GoogleSheetsDbManager';
+import { googleSheetsDb } from '../../services/googleSheetsDb';
 import {
   Building2,
   Users,
@@ -24,11 +26,12 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'OFFICES' | 'ATTENDANCE' | 'EMPLOYEES' | 'PAYROLL'>('OFFICES');
+  const [activeTab, setActiveTab] = useState<'OFFICES' | 'ATTENDANCE' | 'EMPLOYEES' | 'PAYROLL' | 'SHEETS'>('OFFICES');
   const [loading, setLoading] = useState(true);
 
   const [offices, setOffices] = useState<Office[]>([]);
@@ -255,6 +258,17 @@ export const AdminDashboard: React.FC = () => {
         >
           <DollarSign className="w-4 h-4" />
           <span>Eksport Gaji</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('SHEETS')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${activeTab === 'SHEETS' ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20' : 'bg-slate-800/80 text-slate-400 hover:text-white'}`}
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+          <span>Pangkalan Data Google Sheets</span>
+          {googleSheetsDb.getSavedSpreadsheetId() && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          )}
         </button>
       </div>
 
@@ -554,6 +568,11 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 5: GOOGLE SHEETS DATABASE */}
+      {activeTab === 'SHEETS' && (
+        <GoogleSheetsDbManager onDataChanged={loadData} />
       )}
 
       {/* Delete Confirmation Modal */}

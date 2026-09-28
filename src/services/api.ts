@@ -1,6 +1,8 @@
 import { User, Office, AttendanceRecord, DashboardStatus, AdminMetrics, VerificationChallenge } from '../types';
 import { calculateHaversineDistance } from '../utils/geo';
 import { evaluateClockIn, evaluateAttendanceSession } from '../utils/workingHours';
+import { googleSheetsDb } from './googleSheetsDb';
+import { getAccessToken } from './googleAuth';
 
 const STORAGE_KEYS = {
   OFFICES: 'halagel_offices_v1',
@@ -329,6 +331,17 @@ class HalagelApiService {
     const records = this.getAttendanceList();
     records.unshift(newRecord);
     this.saveAttendanceList(records);
+
+    // Real-time background sync to Google Sheets if connected
+    const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
+    if (savedSheetId) {
+      getAccessToken().then((token) => {
+        if (token) {
+          googleSheetsDb.saveAttendanceRecord(token, savedSheetId, newRecord).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
     return newRecord;
   }
 
@@ -381,6 +394,17 @@ class HalagelApiService {
       session.attendanceStatus = evalOut.attendanceStatus;
       session.exceptionNotes = evalOut.notes;
       this.saveAttendanceList(records);
+
+      // Real-time background sync to Google Sheets if connected
+      const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
+      if (savedSheetId) {
+        getAccessToken().then((token) => {
+          if (token) {
+            googleSheetsDb.saveAttendanceRecord(token, savedSheetId, session).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+
       return session;
     } else {
       const evalOut = evaluateAttendanceSession(new Date(now.getTime() - 8 * 3600000), now);
@@ -412,6 +436,17 @@ class HalagelApiService {
       };
       records.unshift(fallbackRecord);
       this.saveAttendanceList(records);
+
+      // Real-time background sync to Google Sheets if connected
+      const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
+      if (savedSheetId) {
+        getAccessToken().then((token) => {
+          if (token) {
+            googleSheetsDb.saveAttendanceRecord(token, savedSheetId, fallbackRecord).catch(() => {});
+          }
+        }).catch(() => {});
+      }
+
       return fallbackRecord;
     }
   }
