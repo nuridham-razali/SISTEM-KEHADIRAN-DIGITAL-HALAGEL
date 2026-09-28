@@ -1,0 +1,9 @@
+{
+  "name": "Halagel Kehadiran",
+  "description": "Sistem Kehadiran Digital Halagel (M) Sdn Bhd dengan GPS Geofens, Pengesahan Wajah & Google Sheets.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
