@@ -108,7 +108,7 @@ export const EmployeeDashboard: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Halagel (M)
             </div>
-            {localStorage.getItem('halagel_google_spreadsheet_id_v1') && (
+            {(localStorage.getItem('halagel_google_spreadsheet_id_v1') || localStorage.getItem('halagel_google_sheets_webhook_url_v1')) && (
               <span className="hidden sm:flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 Sheets Live

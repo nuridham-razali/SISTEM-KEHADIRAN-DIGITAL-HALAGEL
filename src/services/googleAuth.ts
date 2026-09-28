@@ -62,6 +62,10 @@ export const googleSignIn = async (): Promise<{ user: FirebaseUser; accessToken:
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Ralat log masuk Google:', error);
+    if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'domain Vercel anda';
+      throw new Error(`Domain '${currentHost}' belum didaftarkan di Firebase. Sila tambah '${currentHost}' dalam Authorized Domains di Firebase Console.`);
+    }
     throw error;
   } finally {
     isSigningIn = false;

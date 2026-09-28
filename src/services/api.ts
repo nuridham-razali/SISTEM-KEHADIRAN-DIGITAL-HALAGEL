@@ -480,6 +480,7 @@ class HalagelApiService {
         currentUser.faceBiometricHash = hash;
         saveItem(STORAGE_KEYS.AUTH_USER, currentUser);
       }
+      this.triggerBackgroundSheetSync();
     }
     if (payload.photoDataUrl) {
       try {
@@ -504,6 +505,25 @@ class HalagelApiService {
     return this.getOfficesList();
   }
 
+  private triggerBackgroundSheetSync() {
+    const webhook = googleSheetsDb.getSavedWebhookUrl();
+    const sheetId = googleSheetsDb.getSavedSpreadsheetId();
+
+    const records = this.getAttendanceList();
+    const employees = this.getEmployeesList().map(({ password, ...u }) => u);
+    const offices = this.getOfficesList();
+
+    if (webhook) {
+      googleSheetsDb.syncViaWebhook(webhook, records, employees, offices).catch(() => {});
+    } else if (sheetId) {
+      getAccessToken().then((token) => {
+        if (token) {
+          googleSheetsDb.syncAllToSheet(token, sheetId, records, employees, offices).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  }
+
   async createOffice(office: Partial<Office>): Promise<Office> {
     const offices = this.getOfficesList();
     const newOff: Office = {
@@ -519,6 +539,7 @@ class HalagelApiService {
     };
     offices.push(newOff);
     this.saveOfficesList(offices);
+    this.triggerBackgroundSheetSync();
     return newOff;
   }
 
@@ -528,6 +549,7 @@ class HalagelApiService {
     if (index === -1) throw new Error('Pejabat tidak dijumpai');
     offices[index] = { ...offices[index], ...updates };
     this.saveOfficesList(offices);
+    this.triggerBackgroundSheetSync();
     return offices[index];
   }
 
@@ -535,6 +557,7 @@ class HalagelApiService {
     let offices = this.getOfficesList();
     offices = offices.filter((o) => o.officeId !== id);
     this.saveOfficesList(offices);
+    this.triggerBackgroundSheetSync();
     return true;
   }
 
@@ -559,6 +582,7 @@ class HalagelApiService {
     };
     emps.push(newEmp);
     this.saveEmployeesList(emps);
+    this.triggerBackgroundSheetSync();
     const { password, ...safeEmp } = newEmp;
     return safeEmp;
   }
@@ -569,6 +593,7 @@ class HalagelApiService {
     if (idx === -1) throw new Error('Staf tidak dijumpai');
     emps[idx] = { ...emps[idx], ...updates };
     this.saveEmployeesList(emps);
+    this.triggerBackgroundSheetSync();
     const { password, ...safeEmp } = emps[idx];
     return safeEmp;
   }
@@ -577,6 +602,7 @@ class HalagelApiService {
     let emps = this.getEmployeesList();
     emps = emps.filter((e) => e.employeeId !== id);
     this.saveEmployeesList(emps);
+    this.triggerBackgroundSheetSync();
     return true;
   }
 

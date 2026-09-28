@@ -1,6 +1,8 @@
 import { AttendanceRecord, User, Office } from '../types';
 
 const SPREADSHEET_KEY = 'halagel_google_spreadsheet_id_v1';
+const SPREADSHEET_INFO_KEY = 'halagel_google_spreadsheet_info_v1';
+const WEBHOOK_KEY = 'halagel_google_sheets_webhook_url_v1';
 
 export interface SpreadsheetInfo {
   spreadsheetId: string;
@@ -17,8 +19,34 @@ export const googleSheetsDb = {
     localStorage.setItem(SPREADSHEET_KEY, id);
   },
 
+  getSavedSpreadsheetInfo(): SpreadsheetInfo | null {
+    try {
+      const raw = localStorage.getItem(SPREADSHEET_INFO_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setSavedSpreadsheetInfo(info: SpreadsheetInfo) {
+    localStorage.setItem(SPREADSHEET_INFO_KEY, JSON.stringify(info));
+  },
+
   clearSavedSpreadsheetId() {
     localStorage.removeItem(SPREADSHEET_KEY);
+    localStorage.removeItem(SPREADSHEET_INFO_KEY);
+  },
+
+  getSavedWebhookUrl(): string | null {
+    return localStorage.getItem(WEBHOOK_KEY);
+  },
+
+  setSavedWebhookUrl(url: string) {
+    localStorage.setItem(WEBHOOK_KEY, url);
+  },
+
+  clearSavedWebhookUrl() {
+    localStorage.removeItem(WEBHOOK_KEY);
   },
 
   /**
@@ -164,7 +192,19 @@ export const googleSheetsDb = {
   /**
    * Appends or updates an attendance record in the Google Sheet
    */
-  async saveAttendanceRecord(token: string, spreadsheetId: string, r: AttendanceRecord) {
+  async saveAttendanceRecord(token: string | null, spreadsheetId: string | null, r: AttendanceRecord) {
+    const webhookUrl = this.getSavedWebhookUrl();
+    if (webhookUrl) {
+      try {
+        await this.saveViaWebhook(webhookUrl, r);
+        return;
+      } catch (err) {
+        console.warn('Gagal simpan ke Webhook:', err);
+      }
+    }
+
+    if (!token || !spreadsheetId) return;
+
     try {
       // First check if the row already exists
       const readRes = await fetch(
@@ -362,5 +402,31 @@ export const googleSheetsDb = {
       faceVerified: (row[10] as any) || 'VERIFIED',
       exceptionNotes: row[11] !== '-' ? row[11] : null,
     }));
+  },
+
+  /**
+   * Google Apps Script Webhook Operations (Works without OAuth domain constraints)
+   */
+  async saveViaWebhook(webhookUrl: string, record: AttendanceRecord) {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'SAVE_ATTENDANCE', record }),
+    });
+  },
+
+  async syncViaWebhook(
+    webhookUrl: string,
+    records: AttendanceRecord[],
+    employees: User[],
+    offices: Office[]
+  ) {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'SYNC_ALL', records, employees, offices }),
+    });
   },
 };
