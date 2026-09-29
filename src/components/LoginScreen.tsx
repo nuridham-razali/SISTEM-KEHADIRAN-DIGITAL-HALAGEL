@@ -43,7 +43,7 @@ export const LoginScreen: React.FC = () => {
             Log Masuk Kakitangan
           </h1>
           <p className="text-slate-500 text-xs text-center mt-1">
-            GPS Geofens, Pengesahan Wajah & Papan Pemuka Pekerja
+            Halagel (M) Sdn Bhd
           </p>
         </div>
 
