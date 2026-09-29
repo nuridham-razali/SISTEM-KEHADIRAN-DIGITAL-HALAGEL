@@ -4,21 +4,51 @@
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background-color: #0f172a;
+  background-color: #f1f5f9;
+  border-radius: 1.5rem;
 }
 
-/* Custom dark scrollbar */
+/* Metallic gradient and sheen utilities */
+.metallic-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+}
+
+.metallic-button {
+  background: linear-gradient(135deg, #64941e 0%, #588517 50%, #4c7512 100%);
+  box-shadow: 0 4px 14px 0 rgba(88, 133, 23, 0.35);
+  transition: all 0.2s ease-in-out;
+}
+
+.metallic-button:hover {
+  background: linear-gradient(135deg, #6ca020 0%, #5f9019 50%, #527e13 100%);
+  box-shadow: 0 6px 20px 0 rgba(88, 133, 23, 0.45);
+  transform: translateY(-1px);
+}
+
+.metallic-silver-button {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.metallic-silver-button:hover {
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #cbd5e1;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #94a3b8;
 }

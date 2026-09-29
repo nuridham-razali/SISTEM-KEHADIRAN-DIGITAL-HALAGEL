@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 230" width="100%" height="100%">
+  <defs>
+    <linearGradient id="halagelGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64941E"/>
+      <stop offset="50%" stop-color="#588517"/>
+      <stop offset="100%" stop-color="#4E7812"/>
+    </linearGradient>
+    <linearGradient id="metallicSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.12"/>
+    </linearGradient>
+    <filter id="softGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#4E7812" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Group with shadow -->
+  <g filter="url(#softGlow)">
+    <!-- Main Green Oval -->
+    <ellipse cx="265" cy="115" rx="245" ry="98" fill="url(#halagelGreen)" />
+    <!-- Metallic Sheen Overlay -->
+    <ellipse cx="265" cy="115" rx="245" ry="98" fill="url(#metallicSheen)" />
+
+    <!-- Upper Orbit Arc with Dot -->
+    <path d="M 85 62 Q 265 18 445 68" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" />
+    <circle cx="385" cy="46" r="10.5" fill="#FFFFFF" />
+
+    <!-- Lower Orbit Arc -->
+    <path d="M 85 168 Q 265 212 445 162" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" />
+
+    <!-- HALAGEL Bold Wordmark -->
+    <text
+      x="265"
+      y="138"
+      text-anchor="middle"
+      fill="#FFFFFF"
+      font-family="system-ui, -apple-system, 'Montserrat', 'Helvetica Neue', 'Arial Black', sans-serif"
+      font-size="78"
+      font-weight="900"
+      letter-spacing="5"
+    >HALAGEL</text>
+
+    <!-- Registered Trademark ® -->
+    <g transform="translate(520, 58)">
+      <circle cx="0" cy="0" r="15" fill="none" stroke="#588517" stroke-width="3"/>
+      <text
+        x="0"
+        y="5.5"
+        text-anchor="middle"
+        fill="#588517"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="16"
+        font-weight="900"
+      >R</text>
+    </g>
+  </g>
+</svg>
