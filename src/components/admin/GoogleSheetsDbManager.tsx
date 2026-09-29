@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { googleSignIn, getAccessToken, logoutGoogle, initGoogleAuth } from '../../services/googleAuth';
 import { googleSheetsDb, SpreadsheetInfo } from '../../services/googleSheetsDb';
+import { cloudConfigService } from '../../services/cloudConfig';
 import { api } from '../../services/api';
 import {
   FileSpreadsheet,
@@ -134,12 +135,48 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
   const [syncOperation, setSyncOperation] = useState<'PUSH' | 'PULL' | null>(null);
 
   useEffect(() => {
-    const unsubscribe = initGoogleAuth(
+    // 1. Initial fetch of shared database config from Firestore
+    cloudConfigService.fetchConfigFromCloud().then((cfg) => {
+      if (cfg) {
+        if (cfg.spreadsheetId) setSpreadsheetId(cfg.spreadsheetId);
+        if (cfg.spreadsheetTitle && cfg.spreadsheetId && cfg.spreadsheetUrl) {
+          setSheetInfo({
+            spreadsheetId: cfg.spreadsheetId,
+            title: cfg.spreadsheetTitle,
+            spreadsheetUrl: cfg.spreadsheetUrl,
+          });
+        }
+        if (cfg.webhookUrl) {
+          setWebhookUrlInput(cfg.webhookUrl);
+        }
+      }
+    });
+
+    // 2. Real-time subscription so other devices stay in sync
+    const unsubscribeCloud = cloudConfigService.subscribeToCloudConfig((cfg) => {
+      if (cfg) {
+        if (cfg.spreadsheetId) setSpreadsheetId(cfg.spreadsheetId);
+        if (cfg.spreadsheetTitle && cfg.spreadsheetId && cfg.spreadsheetUrl) {
+          setSheetInfo({
+            spreadsheetId: cfg.spreadsheetId,
+            title: cfg.spreadsheetTitle,
+            spreadsheetUrl: cfg.spreadsheetUrl,
+          });
+        }
+        if (cfg.webhookUrl) {
+          setWebhookUrlInput(cfg.webhookUrl);
+        }
+      }
+    });
+
+    // 3. Google OAuth state listener
+    const unsubscribeAuth = initGoogleAuth(
       (user, token) => {
         setGoogleUser(user);
         setAccessToken(token);
-        if (spreadsheetId && token) {
-          loadSheetMetadata(token, spreadsheetId);
+        const currentId = spreadsheetId || googleSheetsDb.getSavedSpreadsheetId();
+        if (currentId && token) {
+          loadSheetMetadata(token, currentId);
         }
       },
       () => {
@@ -147,7 +184,11 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
         setAccessToken(null);
       }
     );
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeCloud();
+      unsubscribeAuth();
+    };
   }, [spreadsheetId]);
 
   const loadSheetMetadata = async (token: string, id: string) => {
@@ -155,6 +196,11 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
       const info = await googleSheetsDb.getSpreadsheetMetadata(token, id);
       setSheetInfo(info);
       googleSheetsDb.setSavedSpreadsheetInfo(info);
+      await cloudConfigService.saveConfigToCloud({
+        spreadsheetId: info.spreadsheetId,
+        spreadsheetTitle: info.title,
+        spreadsheetUrl: info.spreadsheetUrl,
+      });
     } catch (err: any) {
       console.warn('Gagal membaca maklumat spreadsheet:', err);
     }
@@ -176,6 +222,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
     setStatusMessage(null);
     try {
       googleSheetsDb.setSavedWebhookUrl(webhookUrlInput.trim());
+      await cloudConfigService.saveConfigToCloud({ webhookUrl: webhookUrlInput.trim() });
 
       // Immediately sync current data
       const [records, employees, offices] = await Promise.all([
@@ -188,7 +235,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
 
       setStatusMessage({
         type: 'success',
-        text: 'Pangkalan data Google Apps Script berjaya disambungkan! Semua rekod telah dimuat naik ke Google Sheet.',
+        text: 'Pangkalan data Google Apps Script berjaya disambungkan & diselaraskan ke semua peranti! Semua rekod telah dimuat naik ke Google Sheet.',
       });
       onDataChanged();
     } catch (err: any) {
@@ -198,10 +245,11 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
     }
   };
 
-  const handleRemoveWebhook = () => {
+  const handleRemoveWebhook = async () => {
     googleSheetsDb.clearSavedWebhookUrl();
+    await cloudConfigService.saveConfigToCloud({ webhookUrl: null });
     setWebhookUrlInput('');
-    setStatusMessage({ type: 'info', text: 'Sambungan Webhook telah diputuskan.' });
+    setStatusMessage({ type: 'info', text: 'Sambungan Webhook telah diputuskan di semua peranti.' });
   };
 
   const handleGoogleLogin = async () => {
@@ -214,7 +262,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
         setAccessToken(res.accessToken);
         setStatusMessage({ type: 'success', text: `Berjaya disambungkan ke akaun Google: ${res.user.email}` });
 
-        const savedId = googleSheetsDb.getSavedSpreadsheetId();
+        const savedId = spreadsheetId || googleSheetsDb.getSavedSpreadsheetId();
         if (savedId) {
           await loadSheetMetadata(res.accessToken, savedId);
         }
@@ -230,8 +278,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
     await logoutGoogle();
     setGoogleUser(null);
     setAccessToken(null);
-    setSheetInfo(null);
-    setStatusMessage({ type: 'info', text: 'Telah dilog keluar dari Google.' });
+    setStatusMessage({ type: 'info', text: 'Telah dilog keluar dari Google pada peranti ini.' });
   };
 
   const handleCreateNewSpreadsheet = async () => {
@@ -248,6 +295,11 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
       setSpreadsheetId(created.spreadsheetId);
       setSheetInfo(created);
       googleSheetsDb.setSavedSpreadsheetInfo(created);
+      await cloudConfigService.saveConfigToCloud({
+        spreadsheetId: created.spreadsheetId,
+        spreadsheetTitle: created.title,
+        spreadsheetUrl: created.spreadsheetUrl,
+      });
 
       const [records, employees, offices] = await Promise.all([
         api.getAllAttendance(),
@@ -259,7 +311,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
 
       setStatusMessage({
         type: 'success',
-        text: `Pangkalan Data Google Sheet baharu berjaya dicipta: "${created.title}" & disegerakkan dengan rekod semasa!`,
+        text: `Pangkalan Data Google Sheet baharu berjaya dicipta: "${created.title}" & diselaraskan ke semua peranti staf!`,
       });
       onDataChanged();
     } catch (err: any) {

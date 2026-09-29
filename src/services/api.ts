@@ -3,6 +3,13 @@ import { calculateHaversineDistance } from '../utils/geo';
 import { evaluateClockIn, evaluateAttendanceSession } from '../utils/workingHours';
 import { googleSheetsDb } from './googleSheetsDb';
 import { getAccessToken } from './googleAuth';
+import { cloudConfigService } from './cloudConfig';
+
+// Automatically fetch cloud configuration across all devices on app load
+if (typeof window !== 'undefined') {
+  cloudConfigService.fetchConfigFromCloud().catch(() => {});
+  cloudConfigService.subscribeToCloudConfig(() => {});
+}
 
 const STORAGE_KEYS = {
   OFFICES: 'halagel_offices_v1',
@@ -333,8 +340,11 @@ class HalagelApiService {
     this.saveAttendanceList(records);
 
     // Real-time background sync to Google Sheets if connected
+    const savedWebhook = googleSheetsDb.getSavedWebhookUrl();
     const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
-    if (savedSheetId) {
+    if (savedWebhook) {
+      googleSheetsDb.saveViaWebhook(savedWebhook, newRecord).catch(() => {});
+    } else if (savedSheetId) {
       getAccessToken().then((token) => {
         if (token) {
           googleSheetsDb.saveAttendanceRecord(token, savedSheetId, newRecord).catch(() => {});
@@ -396,8 +406,11 @@ class HalagelApiService {
       this.saveAttendanceList(records);
 
       // Real-time background sync to Google Sheets if connected
+      const savedWebhook = googleSheetsDb.getSavedWebhookUrl();
       const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
-      if (savedSheetId) {
+      if (savedWebhook) {
+        googleSheetsDb.saveViaWebhook(savedWebhook, session).catch(() => {});
+      } else if (savedSheetId) {
         getAccessToken().then((token) => {
           if (token) {
             googleSheetsDb.saveAttendanceRecord(token, savedSheetId, session).catch(() => {});
@@ -438,11 +451,14 @@ class HalagelApiService {
       this.saveAttendanceList(records);
 
       // Real-time background sync to Google Sheets if connected
-      const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
-      if (savedSheetId) {
+      const savedWebhookFallback = googleSheetsDb.getSavedWebhookUrl();
+      const savedSheetIdFallback = googleSheetsDb.getSavedSpreadsheetId();
+      if (savedWebhookFallback) {
+        googleSheetsDb.saveViaWebhook(savedWebhookFallback, fallbackRecord).catch(() => {});
+      } else if (savedSheetIdFallback) {
         getAccessToken().then((token) => {
           if (token) {
-            googleSheetsDb.saveAttendanceRecord(token, savedSheetId, fallbackRecord).catch(() => {});
+            googleSheetsDb.saveAttendanceRecord(token, savedSheetIdFallback, fallbackRecord).catch(() => {});
           }
         }).catch(() => {});
       }

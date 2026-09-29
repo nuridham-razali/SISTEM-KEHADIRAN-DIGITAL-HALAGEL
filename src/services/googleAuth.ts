@@ -10,7 +10,7 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App singleton
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 export const SCOPES = [
@@ -18,11 +18,13 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ];
 
+const OAUTH_TOKEN_KEY = 'halagel_google_access_token_v1';
+
 const provider = new GoogleAuthProvider();
 SCOPES.forEach((scope) => provider.addScope(scope));
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = (typeof window !== 'undefined') ? localStorage.getItem(OAUTH_TOKEN_KEY) : null;
 
 /**
  * Initializes Google OAuth state listener.
@@ -33,21 +35,26 @@ export const initGoogleAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
     if (user) {
+      if (!cachedAccessToken && typeof window !== 'undefined') {
+        cachedAccessToken = localStorage.getItem(OAUTH_TOKEN_KEY);
+      }
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(OAUTH_TOKEN_KEY);
+      }
       if (onAuthFailure) onAuthFailure();
     }
   });
 };
 
 /**
- * Triggers Google Sign In popup and caches OAuth Access Token in memory.
+ * Triggers Google Sign In popup and caches OAuth Access Token in memory and localStorage.
  */
 export const googleSignIn = async (): Promise<{ user: FirebaseUser; accessToken: string } | null> => {
   try {
@@ -59,6 +66,9 @@ export const googleSignIn = async (): Promise<{ user: FirebaseUser; accessToken:
     }
 
     cachedAccessToken = credential.accessToken;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(OAUTH_TOKEN_KEY, cachedAccessToken);
+    }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Ralat log masuk Google:', error);
@@ -73,16 +83,27 @@ export const googleSignIn = async (): Promise<{ user: FirebaseUser; accessToken:
 };
 
 /**
- * Retrieves in-memory OAuth Access Token.
+ * Retrieves cached OAuth Access Token.
  */
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
+  if (cachedAccessToken) return cachedAccessToken;
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(OAUTH_TOKEN_KEY);
+    if (saved) {
+      cachedAccessToken = saved;
+      return saved;
+    }
+  }
+  return null;
 };
 
 /**
- * Logs out and clears in-memory token.
+ * Logs out and clears token.
  */
 export const logoutGoogle = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(OAUTH_TOKEN_KEY);
+  }
 };
