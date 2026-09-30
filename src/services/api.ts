@@ -2,21 +2,25 @@ import { User, Office, AttendanceRecord, DashboardStatus, AdminMetrics, Verifica
 import { calculateHaversineDistance } from '../utils/geo';
 import { evaluateClockIn, evaluateAttendanceSession } from '../utils/workingHours';
 import { googleSheetsDb } from './googleSheetsDb';
-import { getAccessToken } from './googleAuth';
-import { cloudConfigService } from './cloudConfig';
-
-// Automatically fetch cloud configuration across all devices on app load
-if (typeof window !== 'undefined') {
-  cloudConfigService.fetchConfigFromCloud().catch(() => {});
-  cloudConfigService.subscribeToCloudConfig(() => {});
-}
 
 const STORAGE_KEYS = {
-  OFFICES: 'halagel_offices_v1',
-  EMPLOYEES: 'halagel_employees_v1',
-  ATTENDANCE: 'halagel_attendance_v1',
-  AUTH_USER: 'halagel_auth_user_v1',
+  OFFICES: 'halagel_offices_v2_sheets',
+  EMPLOYEES: 'halagel_employees_v2_sheets',
+  ATTENDANCE: 'halagel_attendance_v2_sheets',
+  AUTH_USER: 'halagel_auth_user_v2_sheets',
+  LEGACY_CLEANED: 'halagel_legacy_firebase_cleaned_v2',
 };
+
+// Clean up any legacy v1 Firebase/localStorage keys on startup so we start fresh from Google Sheets
+if (typeof window !== 'undefined' && !localStorage.getItem(STORAGE_KEYS.LEGACY_CLEANED)) {
+  localStorage.removeItem('halagel_attendance_v1');
+  localStorage.removeItem('halagel_employees_v1');
+  localStorage.removeItem('halagel_offices_v1');
+  localStorage.removeItem('halagel_google_access_token_v1');
+  localStorage.removeItem('halagel_google_spreadsheet_id_v1');
+  localStorage.removeItem('halagel_google_spreadsheet_info_v1');
+  localStorage.setItem(STORAGE_KEYS.LEGACY_CLEANED, 'true');
+}
 
 const DEFAULT_OFFICES: Office[] = [
   {
@@ -93,34 +97,8 @@ const DEFAULT_EMPLOYEES: (User & { password?: string })[] = [
   },
 ];
 
-const DEFAULT_ATTENDANCE: AttendanceRecord[] = [
-  {
-    sessionId: 'ATT-INIT-01',
-    employeeId: 'EMP101',
-    employeeName: 'Renaldottt',
-    department: 'Pengeluaran & Operasi Kilang',
-    officeId: 'OFF-01',
-    workDate: '2026-09-27',
-    clockInTimeUTC: '2026-09-27T00:05:00.000Z',
-    clockInTimeKL: '27/09/2026, 08:05:00 AM',
-    clockOutTimeUTC: '2026-09-27T09:05:00.000Z',
-    clockOutTimeKL: '27/09/2026, 05:05:00 PM',
-    clockInLat: 5.6432,
-    clockInLng: 100.4912,
-    clockInAccuracy: 10,
-    clockInDistanceMeters: 8,
-    clockOutLat: 5.6432,
-    clockOutLng: 100.4912,
-    clockOutAccuracy: 10,
-    clockOutDistanceMeters: 12,
-    faceVerified: 'YES',
-    faceVerificationConfidence: '0.94',
-    workedMinutes: 540,
-    workedHours: 9,
-    attendanceStatus: 'COMPLETED',
-    exceptionNotes: null,
-  },
-];
+// Start clean with empty attendance list — all records come from Google Sheets!
+const DEFAULT_ATTENDANCE: AttendanceRecord[] = [];
 
 function loadItem<T>(key: string, defaultVal: T): T {
   try {
@@ -139,7 +117,65 @@ function saveItem<T>(key: string, val: T): void {
   }
 }
 
+type SyncListener = () => void;
+
 class HalagelApiService {
+  private listeners: Set<SyncListener> = new Set();
+  private isSyncingFromSheet = false;
+  private lastMutationTime = 0;
+  private lastSyncTime: string | null = null;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      // Initial pull from Google Sheets immediately on app startup
+      this.syncFromGoogleSheets(true).catch(() => {});
+
+      // Poll Google Sheets every 4 seconds so deletions/edits in Google Sheets sync automatically
+      setInterval(() => {
+        if (Date.now() - this.lastMutationTime > 3000) {
+          this.syncFromGoogleSheets(false).catch(() => {});
+        }
+      }, 4000);
+
+      // Also sync immediately whenever the user switches back to the app window/tab
+      window.addEventListener('focus', () => {
+        if (Date.now() - this.lastMutationTime > 2000) {
+          this.syncFromGoogleSheets(false).catch(() => {});
+        }
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && Date.now() - this.lastMutationTime > 2000) {
+          this.syncFromGoogleSheets(false).catch(() => {});
+        }
+      });
+    }
+  }
+
+  /**
+   * Subscribe to real-time Google Sheets data changes
+   */
+  subscribe(listener: SyncListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notifyListeners() {
+    this.listeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  }
+
+  getLastSyncTime(): string | null {
+    return this.lastSyncTime;
+  }
+
   private getOfficesList(): Office[] {
     return loadItem(STORAGE_KEYS.OFFICES, DEFAULT_OFFICES);
   }
@@ -164,16 +200,123 @@ class HalagelApiService {
     saveItem(STORAGE_KEYS.ATTENDANCE, list);
   }
 
+  /**
+   * Pulls the authoritative state from Google Sheets and updates local state.
+   * Any row deleted in Google Sheets is removed from the app!
+   */
+  async syncFromGoogleSheets(force = false): Promise<boolean> {
+    if (this.isSyncingFromSheet && !force) return false;
+    // Avoid overwriting an in-flight local mutation within 3 seconds unless forced
+    if (!force && Date.now() - this.lastMutationTime < 3000) return false;
+
+    this.isSyncingFromSheet = true;
+    try {
+      const currentRecords = this.getAttendanceList();
+      const currentEmployees = this.getEmployeesList();
+      const currentOffices = this.getOfficesList();
+
+      const res = await googleSheetsDb.pullFromDatabase(
+        currentRecords,
+        currentEmployees,
+        currentOffices
+      );
+
+      if (res.synced) {
+        const prevJson = JSON.stringify(currentRecords);
+        const nextJson = JSON.stringify(res.records);
+        let changed = prevJson !== nextJson;
+
+        // Always save the exact attendance list from Google Sheets (even if empty [])
+        this.saveAttendanceList(res.records);
+
+        if (res.employees && res.employees.length > 0) {
+          // Ensure ADMIN account is always available for admin access
+          const hasAdmin = res.employees.some((e) => e.role === 'admin' || e.employeeId === 'ADMIN');
+          const nextEmps = hasAdmin ? res.employees : [DEFAULT_EMPLOYEES[0], ...res.employees];
+          if (JSON.stringify(currentEmployees) !== JSON.stringify(nextEmps)) {
+            changed = true;
+          }
+          this.saveEmployeesList(nextEmps);
+        }
+
+        if (res.offices && res.offices.length > 0) {
+          if (JSON.stringify(currentOffices) !== JSON.stringify(res.offices)) {
+            changed = true;
+          }
+          this.saveOfficesList(res.offices);
+        }
+
+        this.lastSyncTime = new Date().toLocaleTimeString('ms-MY', {
+          timeZone: 'Asia/Kuala_Lumpur',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+
+        if (changed || force) {
+          this.notifyListeners();
+        }
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn('Ralat semasa menyegerak dari Google Sheets:', err);
+      return false;
+    } finally {
+      this.isSyncingFromSheet = false;
+    }
+  }
+
+  /**
+   * Pushes all current data (Attendance, Employees, Offices) to Google Sheets
+   */
+  async pushAllToGoogleSheets(): Promise<void> {
+    this.lastMutationTime = Date.now();
+    const webhook = googleSheetsDb.getSavedWebhookUrl();
+    if (!webhook) return;
+
+    const records = this.getAttendanceList();
+    const employees = this.getEmployeesList().map(({ password, ...u }) => u);
+    const offices = this.getOfficesList();
+
+    await googleSheetsDb.syncViaWebhook(webhook, records, employees, offices);
+    this.lastSyncTime = new Date().toLocaleTimeString('ms-MY', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  }
+
+  private isSameEmployeeId(idA: string, idB: string): boolean {
+    const cleanA = String(idA ?? '').replace(/^'+/, '').trim().toLowerCase();
+    const cleanB = String(idB ?? '').replace(/^'+/, '').trim().toLowerCase();
+    if (!cleanA || !cleanB) return false;
+    if (cleanA === cleanB) return true;
+    if (/^\d+$/.test(cleanA) && /^\d+$/.test(cleanB)) {
+      return cleanA.replace(/^0+/, '') === cleanB.replace(/^0+/, '');
+    }
+    return false;
+  }
+
   async login(identifier: string, pass: string): Promise<User> {
+    // Sync latest employee & attendance data from Google Sheets before login
+    await this.syncFromGoogleSheets(true).catch(() => {});
+
     const employees = this.getEmployeesList();
-    const idClean = identifier.trim().toLowerCase();
-    const emp = employees.find(
-      (e) => e.employeeId.toLowerCase() === idClean || e.email.toLowerCase() === idClean
+    const idClean = identifier.replace(/^'+/, '').trim();
+    const idLower = idClean.toLowerCase();
+    const empIdx = employees.findIndex(
+      (e) =>
+        this.isSameEmployeeId(e.employeeId, idLower) ||
+        e.email.toLowerCase() === idLower
     );
 
-    if (!emp) {
+    if (empIdx === -1) {
       throw new Error('ID Staf / Emel atau kata laluan tidak sah.');
     }
+
+    const emp = employees[empIdx];
 
     const validPass =
       pass === emp.password ||
@@ -183,6 +326,28 @@ class HalagelApiService {
 
     if (!validPass) {
       throw new Error('ID Staf / Emel atau kata laluan tidak sah.');
+    }
+
+    // If the user logged in with a leading-zero ID (e.g. "0123") and Google Sheets had stripped it to "123",
+    // automatically restore the leading zero in the database and sync to Google Sheets!
+    if (/^0\d+$/.test(idClean) && emp.employeeId !== idClean.toUpperCase()) {
+      const restoredId = idClean.toUpperCase();
+      emp.employeeId = restoredId;
+      employees[empIdx] = emp;
+      this.saveEmployeesList(employees);
+
+      const records = this.getAttendanceList();
+      let recordsUpdated = false;
+      records.forEach((r) => {
+        if (this.isSameEmployeeId(r.employeeId, restoredId) && r.employeeId !== restoredId) {
+          r.employeeId = restoredId;
+          recordsUpdated = true;
+        }
+      });
+      if (recordsUpdated) {
+        this.saveAttendanceList(records);
+      }
+      this.pushAllToGoogleSheets().catch(() => {});
     }
 
     const offices = this.getOfficesList();
@@ -205,6 +370,8 @@ class HalagelApiService {
   }
 
   async getDashboardStatus(): Promise<DashboardStatus> {
+    await this.syncFromGoogleSheets(false).catch(() => {});
+
     const user = this.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -213,9 +380,14 @@ class HalagelApiService {
 
     const allRecords = this.getAttendanceList();
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
 
-    const userRecords = allRecords.filter((r) => r.employeeId === user.employeeId);
+    const userRecords = allRecords.filter((r) => this.isSameEmployeeId(r.employeeId, user.employeeId));
     const todayRecords = userRecords.filter((r) => r.workDate === todayStr);
 
     // Open session is strictly any session today where clock-out has not occurred yet
@@ -301,6 +473,9 @@ class HalagelApiService {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Pull latest from Google Sheets before mutating so deleted rows aren't resurrected
+    await this.syncFromGoogleSheets(true).catch(() => {});
+
     const offices = this.getOfficesList();
     const office = offices.find((o) => o.officeId === payload.officeId) || offices[0];
     const dist = calculateHaversineDistance(
@@ -312,8 +487,6 @@ class HalagelApiService {
 
     const isOut = Boolean(payload.isOutstation);
 
-    // GEOFENCE ENFORCEMENT:
-    // If not outstation: must be within office radius!
     if (!isOut && dist > office.radiusMeters) {
       throw new Error(
         `Rakam kehadiran masuk TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${Math.round(dist)}m > ${office.radiusMeters}m). Jika anda bertugas di luar kawasan, sila pilih mod 'Kerja Luar Kawasan (Outstation)'.`
@@ -321,7 +494,12 @@ class HalagelApiService {
     }
 
     const now = new Date();
-    const dateKL = now.toISOString().slice(0, 10);
+    const dateKL = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
     const evalIn = evaluateClockIn(now);
 
     const entryLabel = payload.entryType || (isOut ? 'Kerja Luar Kawasan (Outstation)' : 'Datang Bekerja');
@@ -351,22 +529,16 @@ class HalagelApiService {
         : (payload.remarks ? `[${entryLabel}] ${payload.remarks}` : `[${entryLabel}] ${evalIn.notes}`),
     };
 
+    this.lastMutationTime = Date.now();
     const records = this.getAttendanceList();
     records.unshift(newRecord);
     this.saveAttendanceList(records);
 
-    // Real-time background sync to Google Sheets if connected
     const savedWebhook = googleSheetsDb.getSavedWebhookUrl();
-    const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
     if (savedWebhook) {
-      googleSheetsDb.saveViaWebhook(savedWebhook, newRecord).catch(() => {});
-    } else if (savedSheetId) {
-      getAccessToken().then((token) => {
-        if (token) {
-          googleSheetsDb.saveAttendanceRecord(token, savedSheetId, newRecord).catch(() => {});
-        }
-      }).catch(() => {});
+      await googleSheetsDb.saveViaWebhook(savedWebhook, newRecord).catch(() => {});
     }
+    this.notifyListeners();
 
     return newRecord;
   }
@@ -386,6 +558,9 @@ class HalagelApiService {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
+    // Pull latest from Google Sheets before mutating
+    await this.syncFromGoogleSheets(true).catch(() => {});
+
     const offices = this.getOfficesList();
     const office = offices.find((o) => o.officeId === payload.officeId) || offices[0];
     const dist = calculateHaversineDistance(
@@ -397,21 +572,25 @@ class HalagelApiService {
 
     const isOut = Boolean(payload.isOutstation);
 
-    // Check radius for clock-out if not outstation
     if (!isOut && dist > office.radiusMeters) {
       throw new Error(
         `Rakam kehadiran keluar TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${Math.round(dist)}m > ${office.radiusMeters}m). Jika anda bertugas di luar kawasan, sila pilih mod 'Kerja Luar Kawasan (Outstation)'.`
       );
     }
 
+    this.lastMutationTime = Date.now();
     const records = this.getAttendanceList();
-    // Find open session strictly (no clock out yet)
     const session = records.find(
-      (r) => r.employeeId === user.employeeId && !r.clockOutTimeKL && !r.clockOutTimeUTC
+      (r) => this.isSameEmployeeId(r.employeeId, user.employeeId) && !r.clockOutTimeKL && !r.clockOutTimeUTC
     );
 
     const now = new Date();
-    const dateKL = now.toISOString().slice(0, 10);
+    const dateKL = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
     const exitLabel = payload.exitType || (isOut ? 'Keluar Luar Kawasan (Outstation)' : 'Balik / Tamat Kerja');
 
     if (session) {
@@ -432,13 +611,11 @@ class HalagelApiService {
         session.outstationLocation = payload.outstationLocation || session.outstationLocation || 'Luar Kawasan';
       }
 
-      // Calculate today's cumulative worked hours across all sessions
       const todayOtherRecords = records.filter(
-        (r) => r.employeeId === user.employeeId && r.workDate === dateKL && r.sessionId !== session.sessionId && (r.workedHours || 0) > 0
+        (r) => this.isSameEmployeeId(r.employeeId, user.employeeId) && r.workDate === dateKL && r.sessionId !== session.sessionId && (r.workedHours || 0) > 0
       );
       const totalTodayHours = todayOtherRecords.reduce((acc, curr) => acc + (curr.workedHours || 0), session.workedHours || 0);
 
-      // Determine movement status
       if (exitLabel.includes('Rehat')) {
         session.attendanceStatus = 'REHAT';
       } else if (exitLabel.includes('Urusan') || exitLabel.includes('Beli Barang') || exitLabel.includes('Pembelian')) {
@@ -463,18 +640,11 @@ class HalagelApiService {
 
       this.saveAttendanceList(records);
 
-      // Real-time background sync to Google Sheets if connected
       const savedWebhook = googleSheetsDb.getSavedWebhookUrl();
-      const savedSheetId = googleSheetsDb.getSavedSpreadsheetId();
       if (savedWebhook) {
-        googleSheetsDb.saveViaWebhook(savedWebhook, session).catch(() => {});
-      } else if (savedSheetId) {
-        getAccessToken().then((token) => {
-          if (token) {
-            googleSheetsDb.saveAttendanceRecord(token, savedSheetId, session).catch(() => {});
-          }
-        }).catch(() => {});
+        await googleSheetsDb.saveViaWebhook(savedWebhook, session).catch(() => {});
       }
+      this.notifyListeners();
 
       return session;
     } else {
@@ -512,18 +682,11 @@ class HalagelApiService {
       records.unshift(fallbackRecord);
       this.saveAttendanceList(records);
 
-      // Real-time background sync to Google Sheets if connected
       const savedWebhookFallback = googleSheetsDb.getSavedWebhookUrl();
-      const savedSheetIdFallback = googleSheetsDb.getSavedSpreadsheetId();
       if (savedWebhookFallback) {
-        googleSheetsDb.saveViaWebhook(savedWebhookFallback, fallbackRecord).catch(() => {});
-      } else if (savedSheetIdFallback) {
-        getAccessToken().then((token) => {
-          if (token) {
-            googleSheetsDb.saveAttendanceRecord(token, savedSheetIdFallback, fallbackRecord).catch(() => {});
-          }
-        }).catch(() => {});
+        await googleSheetsDb.saveViaWebhook(savedWebhookFallback, fallbackRecord).catch(() => {});
       }
+      this.notifyListeners();
 
       return fallbackRecord;
     }
@@ -535,6 +698,9 @@ class HalagelApiService {
     consentVersion: string;
     photoDataUrl?: string;
   }): Promise<boolean> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const emps = this.getEmployeesList();
     const emp = emps.find((e) => e.employeeId === payload.employeeId);
     const hash = 'HLG_FACE_SIG_' + Math.abs(payload.biometricVector.reduce((acc, v) => acc + v, 0)).toFixed(4);
@@ -558,14 +724,13 @@ class HalagelApiService {
         currentUser.faceBiometricHash = hash;
         saveItem(STORAGE_KEYS.AUTH_USER, currentUser);
       }
-      this.triggerBackgroundSheetSync();
+      await this.pushAllToGoogleSheets().catch(() => {});
     }
     if (payload.photoDataUrl) {
       try {
         localStorage.setItem(`halagel_face_${payload.employeeId}`, payload.photoDataUrl);
       } catch (_e) {}
     }
-    // Also save normalized biometric vector for client-side face matching
     try {
       localStorage.setItem(`halagel_face_vector_${payload.employeeId}`, JSON.stringify(payload.biometricVector));
     } catch (_e) {}
@@ -574,35 +739,20 @@ class HalagelApiService {
   }
 
   async getMyHistory(): Promise<AttendanceRecord[]> {
+    await this.syncFromGoogleSheets(false).catch(() => {});
     const user = this.getCurrentUser();
     if (!user) return [];
-    return this.getAttendanceList().filter((r) => r.employeeId === user.employeeId);
+    return this.getAttendanceList().filter((r) => this.isSameEmployeeId(r.employeeId, user.employeeId));
   }
 
   async getOffices(): Promise<Office[]> {
     return this.getOfficesList();
   }
 
-  private triggerBackgroundSheetSync() {
-    const webhook = googleSheetsDb.getSavedWebhookUrl();
-    const sheetId = googleSheetsDb.getSavedSpreadsheetId();
-
-    const records = this.getAttendanceList();
-    const employees = this.getEmployeesList().map(({ password, ...u }) => u);
-    const offices = this.getOfficesList();
-
-    if (webhook) {
-      googleSheetsDb.syncViaWebhook(webhook, records, employees, offices).catch(() => {});
-    } else if (sheetId) {
-      getAccessToken().then((token) => {
-        if (token) {
-          googleSheetsDb.syncAllToSheet(token, sheetId, records, employees, offices).catch(() => {});
-        }
-      }).catch(() => {});
-    }
-  }
-
   async createOffice(office: Partial<Office>): Promise<Office> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const offices = this.getOfficesList();
     const newOff: Office = {
       officeId: 'OFF-' + (offices.length + 1).toString().padStart(2, '0'),
@@ -617,25 +767,34 @@ class HalagelApiService {
     };
     offices.push(newOff);
     this.saveOfficesList(offices);
-    this.triggerBackgroundSheetSync();
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return newOff;
   }
 
   async updateOffice(id: string, updates: Partial<Office>): Promise<Office> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const offices = this.getOfficesList();
     const index = offices.findIndex((o) => o.officeId === id);
     if (index === -1) throw new Error('Pejabat tidak dijumpai');
     offices[index] = { ...offices[index], ...updates };
     this.saveOfficesList(offices);
-    this.triggerBackgroundSheetSync();
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return offices[index];
   }
 
   async deleteOffice(id: string): Promise<boolean> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     let offices = this.getOfficesList();
     offices = offices.filter((o) => o.officeId !== id);
     this.saveOfficesList(offices);
-    this.triggerBackgroundSheetSync();
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return true;
   }
 
@@ -644,6 +803,9 @@ class HalagelApiService {
   }
 
   async createEmployee(data: Partial<User & { password?: string }>): Promise<User> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const emps = this.getEmployeesList();
     const newEmp: User & { password?: string } = {
       employeeId: data.employeeId || 'EMP' + (emps.length + 100),
@@ -660,32 +822,75 @@ class HalagelApiService {
     };
     emps.push(newEmp);
     this.saveEmployeesList(emps);
-    this.triggerBackgroundSheetSync();
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     const { password, ...safeEmp } = newEmp;
     return safeEmp;
   }
 
   async updateEmployee(id: string, updates: Partial<User>): Promise<User> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const emps = this.getEmployeesList();
-    const idx = emps.findIndex((e) => e.employeeId === id);
+    const idx = emps.findIndex((e) => this.isSameEmployeeId(e.employeeId, id));
     if (idx === -1) throw new Error('Staf tidak dijumpai');
-    emps[idx] = { ...emps[idx], ...updates };
+    const cleanUpdates = { ...updates };
+    if (cleanUpdates.employeeId) {
+      cleanUpdates.employeeId = cleanUpdates.employeeId.replace(/^'+/, '').trim().toUpperCase();
+    }
+    const oldId = emps[idx].employeeId;
+    emps[idx] = { ...emps[idx], ...cleanUpdates };
     this.saveEmployeesList(emps);
-    this.triggerBackgroundSheetSync();
+
+    // If employeeId was updated (e.g. restoring leading zero "123" -> "0123"), sync all attendance records for this employee
+    const newId = emps[idx].employeeId;
+    if (newId && newId !== oldId) {
+      const records = this.getAttendanceList();
+      let recChanged = false;
+      records.forEach((r) => {
+        if (this.isSameEmployeeId(r.employeeId, oldId) || this.isSameEmployeeId(r.employeeId, newId)) {
+          r.employeeId = newId;
+          recChanged = true;
+        }
+      });
+      if (recChanged) {
+        this.saveAttendanceList(records);
+      }
+    }
+
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     const { password, ...safeEmp } = emps[idx];
     return safeEmp;
   }
 
   async deleteEmployee(id: string): Promise<boolean> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     let emps = this.getEmployeesList();
     emps = emps.filter((e) => e.employeeId !== id);
     this.saveEmployeesList(emps);
-    this.triggerBackgroundSheetSync();
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return true;
   }
 
   async getAllAttendance(): Promise<AttendanceRecord[]> {
     return this.getAttendanceList();
+  }
+
+  async deleteAttendance(sessionId: string): Promise<boolean> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
+    let records = this.getAttendanceList();
+    records = records.filter((r) => r.sessionId !== sessionId);
+    this.saveAttendanceList(records);
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
+    return true;
   }
 
   async correctAttendance(sessionId: string, payload: {
@@ -695,6 +900,9 @@ class HalagelApiService {
     workedMinutes?: number;
     reason: string;
   }): Promise<AttendanceRecord> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const records = this.getAttendanceList();
     const rec = records.find((r) => r.sessionId === sessionId);
     if (!rec) throw new Error('Rekod tidak dijumpai');
@@ -708,6 +916,8 @@ class HalagelApiService {
     }
     rec.exceptionNotes = `Pelarasan Admin: ${payload.reason}`;
     this.saveAttendanceList(records);
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return rec;
   }
 
@@ -715,17 +925,22 @@ class HalagelApiService {
     const emps = this.getEmployeesList();
     const offices = this.getOfficesList();
     const records = this.getAttendanceList();
-    const nowStr = new Date().toISOString().slice(0, 10);
+    const nowStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
     const todayRecs = records.filter((r) => r.workDate === nowStr);
 
     return {
       totalEmployees: emps.length,
       activeEmployees: emps.filter((e) => e.active).length,
       totalOffices: offices.length,
-      activeSessionsNow: todayRecs.filter((r) => r.attendanceStatus === 'IN_PROGRESS').length,
+      activeSessionsNow: todayRecs.filter((r) => r.attendanceStatus === 'IN_PROGRESS' || (!r.clockOutTimeKL && !r.clockOutTimeUTC)).length,
       todayTotalClockIns: todayRecs.length,
       todayCompletedSessions: todayRecs.filter((r) => r.attendanceStatus === 'COMPLETED').length,
-      flaggedExceptions: records.filter((r) => r.attendanceStatus.startsWith('EXCEPTION_')).length,
+      flaggedExceptions: records.filter((r) => r.attendanceStatus.startsWith('EXCEPTION_') || r.attendanceStatus === 'LAMBAT').length,
     };
   }
 
@@ -746,9 +961,10 @@ class HalagelApiService {
     });
 
     records.forEach((r) => {
-      if (summaryMap[r.employeeId]) {
-        summaryMap[r.employeeId].daysWorked += 1;
-        summaryMap[r.employeeId].totalHours += r.workedHours || 8;
+      const matchKey = Object.keys(summaryMap).find((k) => this.isSameEmployeeId(k, r.employeeId));
+      if (matchKey && summaryMap[matchKey]) {
+        summaryMap[matchKey].daysWorked += 1;
+        summaryMap[matchKey].totalHours += r.workedHours || 0;
       }
     });
 
@@ -787,6 +1003,9 @@ class HalagelApiService {
     password?: string;
     active?: boolean;
   }>): Promise<{ added: number; updated: number }> {
+    await this.syncFromGoogleSheets(true).catch(() => {});
+    this.lastMutationTime = Date.now();
+
     const emps = this.getEmployeesList();
     let added = 0;
     let updated = 0;
@@ -827,6 +1046,8 @@ class HalagelApiService {
     }
 
     this.saveEmployeesList(emps);
+    await this.pushAllToGoogleSheets().catch(() => {});
+    this.notifyListeners();
     return { added, updated };
   }
 }

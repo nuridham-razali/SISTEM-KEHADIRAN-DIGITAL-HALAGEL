@@ -1,4 +1,5 @@
 import React from 'react';
+import { HALAGEL_LOGO } from '../../assets/logo';
 
 interface HalagelLogoProps {
   className?: string;
@@ -21,7 +22,7 @@ export const HalagelLogo: React.FC<HalagelLogoProps> = ({
   return (
     <div className={`inline-flex flex-col items-center select-none ${className}`}>
       <img
-        src="/halagel-logo.svg"
+        src={HALAGEL_LOGO}
         alt="Halagel Logo"
         className={`${sizeClasses[size]} w-auto object-contain drop-shadow-md transition-transform duration-300 hover:scale-[1.02]`}
       />

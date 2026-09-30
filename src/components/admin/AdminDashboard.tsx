@@ -8,6 +8,7 @@ import { CorrectionModal } from './CorrectionModal';
 import { ImportEmployeesModal } from './ImportEmployeesModal';
 import { GoogleSheetsDbManager } from './GoogleSheetsDbManager';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
+import { HALAGEL_LOGO } from '../../assets/logo';
 import {
   Building2,
   Users,
@@ -48,14 +49,17 @@ export const AdminDashboard: React.FC = () => {
   const [showImportEmployeesModal, setShowImportEmployeesModal] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const [correctingRecord, setCorrectingRecord] = useState<AttendanceRecord | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: 'OFFICE' | 'EMPLOYEE'; id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'OFFICE' | 'EMPLOYEE' | 'ATTENDANCE'; id: string; name: string } | null>(null);
 
   // Payroll
   const [payrollPreview, setPayrollPreview] = useState<any>(null);
 
-  const loadData = async () => {
+  const loadData = async (forceSheetPull = false) => {
     setLoading(true);
     try {
+      if (forceSheetPull) {
+        await api.syncFromGoogleSheets(true);
+      }
       const [offList, recList, empList, met] = await Promise.all([
         api.getOffices(),
         api.getAllAttendance(),
@@ -74,7 +78,11 @@ export const AdminDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
+    const unsubscribe = api.subscribe(() => {
+      loadData(false);
+    });
+    return unsubscribe;
   }, []);
 
   const loadPayroll = async () => {
@@ -90,17 +98,19 @@ export const AdminDashboard: React.FC = () => {
     if (activeTab === 'PAYROLL') {
       loadPayroll();
     }
-  }, [activeTab]);
+  }, [activeTab, records]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     if (deleteTarget.type === 'OFFICE') {
       await api.deleteOffice(deleteTarget.id);
-    } else {
+    } else if (deleteTarget.type === 'EMPLOYEE') {
       await api.deleteEmployee(deleteTarget.id);
+    } else if (deleteTarget.type === 'ATTENDANCE') {
+      await api.deleteAttendance(deleteTarget.id);
     }
     setDeleteTarget(null);
-    loadData();
+    loadData(false);
   };
 
   const handleExportCsv = async () => {
@@ -150,25 +160,35 @@ export const AdminDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col max-w-5xl mx-auto p-4 sm:p-6 pb-24">
       {/* Admin Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-5 border-b border-slate-800 gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/30">
-              PORTAL PENTADBIR
-            </span>
-            <span className="text-xs text-slate-400">Halagel (M) Sdn Bhd</span>
+        <div className="flex items-center gap-3.5">
+          <div className="px-3 py-1.5 rounded-2xl bg-white border border-emerald-500/30 shadow-md flex items-center justify-center shrink-0">
+            <img
+              src={HALAGEL_LOGO}
+              alt="Halagel Logo"
+              className="h-9 w-auto object-contain"
+            />
           </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            Pengurusan Kehadiran & Geofens
-          </h1>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/30">
+                PORTAL PENTADBIR
+              </span>
+              <span className="text-xs text-slate-400">Halagel (M) Sdn Bhd</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Pengurusan Kehadiran & Geofens
+            </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-center">
           <button
-            onClick={loadData}
-            title="Muat Semula"
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            onClick={() => loadData(true)}
+            title="Segerak & Muat Semula dari Google Sheets"
+            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold flex items-center gap-1.5 border border-emerald-500/30 transition cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Segerak Sheet</span>
           </button>
           <button
             onClick={logout}
@@ -467,6 +487,19 @@ export const AdminDashboard: React.FC = () => {
                       <Edit className="w-3 h-3" />
                       <span>Laras</span>
                     </button>
+                    <button
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: 'ATTENDANCE',
+                          id: r.sessionId,
+                          name: `${r.employeeName} (${r.workDate})`,
+                        })
+                      }
+                      title="Padam Rekod Kehadiran"
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))
@@ -634,14 +667,23 @@ export const AdminDashboard: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-white">Sahkan Pemadaman</h3>
                 <p className="text-xs text-slate-400">
-                  {deleteTarget.type === 'OFFICE' ? 'Padam Lokasi Cawangan' : 'Padam Akaun Kakitangan'}
+                  {deleteTarget.type === 'OFFICE'
+                    ? 'Padam Lokasi Cawangan'
+                    : deleteTarget.type === 'EMPLOYEE'
+                    ? 'Padam Akaun Kakitangan'
+                    : 'Padam Rekod Kehadiran'}
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Adakah anda pasti ingin memadam {deleteTarget.type === 'OFFICE' ? 'cawangan' : 'kakitangan'}{' '}
-              <strong className="text-white">{deleteTarget.name}</strong> ({deleteTarget.id})? Tindakan ini tidak boleh diundur.
+              Adakah anda pasti ingin memadam{' '}
+              {deleteTarget.type === 'OFFICE'
+                ? 'cawangan'
+                : deleteTarget.type === 'EMPLOYEE'
+                ? 'kakitangan'
+                : 'rekod kehadiran'}{' '}
+              <strong className="text-white">{deleteTarget.name}</strong> ({deleteTarget.id})? Ia juga akan dipadam terus dari Google Sheets.
             </p>
 
             <div className="flex gap-2 pt-1">

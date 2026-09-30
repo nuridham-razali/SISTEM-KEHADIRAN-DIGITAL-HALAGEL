@@ -266,8 +266,8 @@ export const AdminOfficeMapPicker: React.FC<AdminOfficeMapPickerProps> = ({
   }, [latitude, longitude, radiusMeters, officeName]);
 
   // Location search using OpenStreetMap Nominatim
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e?: React.SyntheticEvent) => {
+    if (e) e.preventDefault();
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     setSearchStatus(null);
@@ -322,7 +322,7 @@ export const AdminOfficeMapPicker: React.FC<AdminOfficeMapPickerProps> = ({
     <div className="space-y-2">
       {/* Search & Location Tools */}
       <div className="flex gap-2">
-        <form onSubmit={handleSearch} className="flex-1 flex gap-1.5">
+        <div className="flex-1 flex gap-1.5">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -330,17 +330,24 @@ export const AdminOfficeMapPicker: React.FC<AdminOfficeMapPickerProps> = ({
               placeholder="Cari lokasi: cth: MIEL Sungai Petani, Cyberjaya..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
               className="w-full bg-[#0F172A] border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
             />
           </div>
           <button
-            type="submit"
+            type="button"
+            onClick={() => handleSearch()}
             disabled={isSearching}
             className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
           >
             {isSearching ? '...' : 'Cari'}
           </button>
-        </form>
+        </div>
 
         <button
           type="button"

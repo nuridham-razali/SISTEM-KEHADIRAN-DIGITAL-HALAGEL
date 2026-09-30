@@ -45,7 +45,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     setError(null);
     setSaving(true);
     try {
-      const cleanEmpId = employeeId.trim().toUpperCase();
+      const cleanEmpId = employeeId.replace(/^'+/, '').trim().toUpperCase();
       if (isCreate) {
         await api.createEmployee({
           employeeId: cleanEmpId,
@@ -58,8 +58,9 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         });
       } else {
         await api.updateEmployee(employee.employeeId, {
+          employeeId: cleanEmpId,
           name: name.trim(),
-          email: employee.email || `${employee.employeeId.toLowerCase()}@halagel.com`,
+          email: employee.email || `${cleanEmpId.toLowerCase()}@halagel.com`,
           department,
           assignedOfficeId,
           role,
@@ -95,19 +96,22 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          {isCreate && (
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">ID Staf</label>
-              <input
-                type="text"
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                required
-                placeholder="cth: EMP104"
-                className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              ID Staf <span className="text-emerald-400 text-[10px] font-normal">(Menyokong angka 0 di hadapan, cth: 0123 / 0045)</span>
+            </label>
+            <input
+              type="text"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
+              required
+              placeholder="cth: 0123 atau EMP104"
+              className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              💡 Sistem akan menghantar format teks (<code>'0123</code>) secara automatik ke Google Sheets supaya angka <code>0</code> di hadapan tidak hilang.
+            </p>
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">Nama Penuh</label>

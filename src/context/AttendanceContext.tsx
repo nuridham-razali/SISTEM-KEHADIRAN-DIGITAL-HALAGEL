@@ -92,6 +92,11 @@ export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setPermissionPromptOpen(true);
         sessionStorage.setItem('halagel_gps_prompted', 'true');
       }
+
+      const unsubscribe = api.subscribe(() => {
+        refreshDashboard();
+      });
+      return unsubscribe;
     }
   }, [user]);
 

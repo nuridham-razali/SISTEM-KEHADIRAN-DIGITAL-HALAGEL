@@ -1,9 +1,9 @@
 import { AttendanceRecord, User, Office } from '../types';
 import { DEFAULT_APPS_SCRIPT_URL } from '../config/database';
 
-const SPREADSHEET_KEY = 'halagel_google_spreadsheet_id_v1';
-const SPREADSHEET_INFO_KEY = 'halagel_google_spreadsheet_info_v1';
-const WEBHOOK_KEY = 'halagel_google_sheets_webhook_url_v1';
+const SPREADSHEET_KEY = 'halagel_sheets_id_v2';
+const SPREADSHEET_INFO_KEY = 'halagel_sheets_info_v2';
+const WEBHOOK_KEY = 'halagel_sheets_webhook_url_v2';
 
 export interface SpreadsheetInfo {
   spreadsheetId: string;
@@ -11,16 +11,169 @@ export interface SpreadsheetInfo {
   spreadsheetUrl: string;
 }
 
+export interface PullSyncResult {
+  synced: boolean;
+  records: AttendanceRecord[];
+  employees?: (User & { password?: string })[];
+  offices?: Office[];
+  spreadsheetInfo?: SpreadsheetInfo;
+}
+
+function extractSpreadsheetId(input: string): string {
+  const trimmed = input.trim();
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return trimmed;
+}
+
+/**
+ * Normalizes Staff ID read from Google Sheets (strips any leading apostrophe
+ * and restores leading zero if a matching local employee ID has leading zeros).
+ */
+function normalizeSheetEmployeeId(
+  rawVal: any,
+  localEmployees: { employeeId: string }[] = []
+): string {
+  const cleaned = String(rawVal ?? '').replace(/^'+/, '').trim().toUpperCase();
+  if (!cleaned) return '';
+
+  // Exact match first
+  const exact = localEmployees.find((e) => e.employeeId.toUpperCase() === cleaned);
+  if (exact) return exact.employeeId.toUpperCase();
+
+  // If numeric (e.g. Sheet stripped "0012" -> 12), check if local has "0012"
+  if (/^\d+$/.test(cleaned)) {
+    const paddedMatch = localEmployees.find(
+      (e) => /^\d+$/.test(e.employeeId) && e.employeeId.replace(/^0+/, '') === cleaned.replace(/^0+/, '')
+    );
+    if (paddedMatch) {
+      return paddedMatch.employeeId.toUpperCase();
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Formats Staff ID for writing to Google Sheets via Apps Script so leading zeros
+ * (e.g. "0123") are forced as Plain Text ('0123) and never stripped by Google Sheets.
+ */
+function formatEmployeeIdForSheet(empId: string): string {
+  const clean = String(empId ?? '').replace(/^'+/, '').trim();
+  if (/^0/.test(clean) || /^\d+$/.test(clean)) {
+    return `'${clean}`;
+  }
+  return clean;
+}
+
+function normalizeWorkDate(val: any): string {
+  if (!val) return new Date().toISOString().slice(0, 10);
+  const str = String(val).trim();
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  // DD/MM/YYYY
+  const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+  }
+  // ISO Date string from Google Apps Script getValues()
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kuala_Lumpur',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(parsed);
+    } catch {
+      return parsed.toISOString().slice(0, 10);
+    }
+  }
+  return str;
+}
+
+function formatSheetTime(val: any, workDate: string): string {
+  if (!val) return '';
+  const str = String(val).trim();
+  if (!str || str === '-' || str === 'Belum Keluar') return '';
+
+  // Check if Apps Script serialized a Date object like 1899-12-30T... or 2026-...T...Z
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const timePart = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kuala_Lumpur',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }).format(parsed);
+      return `${workDate}, ${timePart}`;
+    }
+  }
+  return str;
+}
+
+function parseExceptionMetadata(notes: string | null | undefined) {
+  if (!notes || notes === '-') {
+    return {};
+  }
+  let isOutstation = false;
+  let outstationLocation: string | null = null;
+  let entryType: string | undefined = undefined;
+  let exitType: string | undefined = undefined;
+
+  const outMatch = notes.match(/\[OUTSTATION:\s*([^\]]+)\]/i);
+  if (outMatch) {
+    isOutstation = true;
+    outstationLocation = outMatch[1].trim();
+  }
+  const locMatch = notes.match(/\[Lokasi:\s*([^\]]+)\]/i);
+  if (locMatch) {
+    isOutstation = true;
+    outstationLocation = locMatch[1].trim();
+  }
+  const masukMatch = notes.match(/Masuk:\s*([^•(]+)/i);
+  if (masukMatch) {
+    entryType = masukMatch[1].trim();
+  } else {
+    const bracketEntry = notes.match(/^\[([^\]]+)\]/);
+    if (bracketEntry && !bracketEntry[1].toUpperCase().startsWith('OUTSTATION')) {
+      entryType = bracketEntry[1].trim();
+    }
+  }
+  const keluarMatch = notes.match(/Keluar:\s*([^•(]+)/i);
+  if (keluarMatch) {
+    exitType = keluarMatch[1].trim();
+  }
+
+  return { isOutstation, outstationLocation, entryType, exitType };
+}
+
 export const googleSheetsDb = {
   getSavedSpreadsheetId(): string | null {
+    if (typeof window === 'undefined') return null;
     return localStorage.getItem(SPREADSHEET_KEY);
   },
 
-  setSavedSpreadsheetId(id: string) {
-    localStorage.setItem(SPREADSHEET_KEY, id);
+  setSavedSpreadsheetId(idOrUrl: string) {
+    if (typeof window === 'undefined') return;
+    const cleanId = extractSpreadsheetId(idOrUrl);
+    localStorage.setItem(SPREADSHEET_KEY, cleanId);
+    this.setSavedSpreadsheetInfo({
+      spreadsheetId: cleanId,
+      title: 'Halagel Google Sheet Database',
+      spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${cleanId}/edit`,
+    });
   },
 
   getSavedSpreadsheetInfo(): SpreadsheetInfo | null {
+    if (typeof window === 'undefined') return null;
     try {
       const raw = localStorage.getItem(SPREADSHEET_INFO_KEY);
       return raw ? JSON.parse(raw) : null;
@@ -30,10 +183,12 @@ export const googleSheetsDb = {
   },
 
   setSavedSpreadsheetInfo(info: SpreadsheetInfo) {
+    if (typeof window === 'undefined') return;
     localStorage.setItem(SPREADSHEET_INFO_KEY, JSON.stringify(info));
   },
 
   clearSavedSpreadsheetId() {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(SPREADSHEET_KEY);
     localStorage.removeItem(SPREADSHEET_INFO_KEY);
   },
@@ -45,7 +200,6 @@ export const googleSheetsDb = {
         return stored.trim();
       }
     }
-    // Fallback to in-code default or Vercel environment variable
     if (DEFAULT_APPS_SCRIPT_URL && DEFAULT_APPS_SCRIPT_URL.trim() !== '') {
       return DEFAULT_APPS_SCRIPT_URL.trim();
     }
@@ -73,378 +227,456 @@ export const googleSheetsDb = {
   },
 
   setSavedWebhookUrl(url: string) {
-    localStorage.setItem(WEBHOOK_KEY, url);
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(WEBHOOK_KEY, url.trim());
   },
 
   clearSavedWebhookUrl() {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(WEBHOOK_KEY);
   },
 
   /**
-   * Fetches metadata for an existing Google Spreadsheet
+   * Parses raw 2D rows from the "Kehadiran" sheet into AttendanceRecord[].
+   * Any row deleted in Google Sheets will not be in `rows`, so it will be removed from the app!
    */
-  async getSpreadsheetMetadata(token: string, spreadsheetId: string): Promise<SpreadsheetInfo> {
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+  parseAttendanceRows(
+    rows: any[][],
+    existingLocal: AttendanceRecord[] = [],
+    existingEmployees: { employeeId: string }[] = []
+  ): AttendanceRecord[] {
+    if (!Array.isArray(rows)) return [];
+
+    const localMap = new Map<string, AttendanceRecord>();
+    existingLocal.forEach((r) => {
+      if (r.sessionId) localMap.set(r.sessionId, r);
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Gagal membaca Google Sheet (Status: ${res.status})`);
-    }
-    const data = await res.json();
-    return {
-      spreadsheetId: data.spreadsheetId,
-      title: data.properties?.title || 'Halagel Database',
-      spreadsheetUrl: data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${data.spreadsheetId}`,
-    };
+
+    const validRows = rows.filter((row) => {
+      if (!Array.isArray(row) || row.length === 0) return false;
+      const col0 = String(row[0] ?? '').trim();
+      const col1 = String(row[1] ?? '').trim();
+      if (!col0 && !col1) return false;
+      if (col0.toLowerCase() === 'session id' || col1.toLowerCase() === 'id staf') return false;
+      return true;
+    });
+
+    return validRows.map((row, index) => {
+      const sessionId = String(row[0] || `ATT-SHEET-${index}`).trim();
+      const prev = localMap.get(sessionId);
+
+      const employeeId = normalizeSheetEmployeeId(row[1] || prev?.employeeId || '', existingEmployees);
+      const employeeName = String(row[2] || prev?.employeeName || '').trim();
+      const department = String(row[3] || prev?.department || '').trim();
+      const workDate = normalizeWorkDate(row[4] || prev?.workDate);
+      const clockInTimeKL = formatSheetTime(row[5], workDate) || prev?.clockInTimeKL || `${workDate}, 08:30:00 AM`;
+
+      const rawOut = String(row[6] ?? '').trim();
+      const isStillOpen = !rawOut || rawOut === 'Belum Keluar' || rawOut === '-';
+      const clockOutTimeKL = isStillOpen ? undefined : formatSheetTime(rawOut, workDate);
+
+      // Check if this is the 20-column Google Sheet schema (row.length >= 18)
+      const is20Col = row.length >= 18;
+
+      if (is20Col) {
+        const rawEntryType = String(row[7] ?? '').trim();
+        const rawInRemarks = String(row[8] ?? '').trim();
+        const rawExitType = String(row[9] ?? '').trim();
+        const rawOutRemarks = String(row[10] ?? '').trim();
+        const attendanceStatus = String(row[11] || (isStillOpen ? 'IN_PROGRESS' : 'COMPLETED')).trim();
+
+        const rawHours = String(row[12] ?? '').replace(/jam/i, '').trim();
+        const parsedHours = rawHours && rawHours !== '-' ? parseFloat(rawHours) : NaN;
+        const workedHours = !isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null));
+        const workedMinutes = workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null);
+
+        const rawOutstation = String(row[13] ?? '').trim().toUpperCase();
+        const isOutstation =
+          rawOutstation === 'YA' ||
+          rawOutstation === 'YES' ||
+          rawOutstation === 'TRUE' ||
+          attendanceStatus === 'OUTSTATION';
+        const rawOutLoc = String(row[14] ?? '').trim();
+        const outstationLocation = rawOutLoc && rawOutLoc !== '-' ? rawOutLoc : null;
+
+        const parsedDist = parseInt(String(row[15] ?? '0'), 10);
+        const clockInDistanceMeters = !isNaN(parsedDist) ? parsedDist : (prev?.clockInDistanceMeters ?? 0);
+
+        const faceVerified = String(row[16] || prev?.faceVerified || 'YES').trim();
+        const rawNotes = String(row[17] ?? '').trim();
+        const exceptionNotes = !rawNotes || rawNotes === '-' ? null : rawNotes;
+        const officeId = String(row[18] || prev?.officeId || 'OFF-01').trim();
+
+        return {
+          sessionId,
+          employeeId,
+          employeeName,
+          department,
+          officeId,
+          workDate,
+          clockInTimeUTC: prev?.clockInTimeUTC || new Date().toISOString(),
+          clockInTimeKL,
+          clockOutTimeUTC: isStillOpen ? undefined : (prev?.clockOutTimeUTC || new Date().toISOString()),
+          clockOutTimeKL,
+          clockInLat: prev?.clockInLat ?? 5.6432,
+          clockInLng: prev?.clockInLng ?? 100.4912,
+          clockInAccuracy: prev?.clockInAccuracy ?? 10,
+          clockInDistanceMeters,
+          clockOutLat: isStillOpen ? null : (prev?.clockOutLat ?? null),
+          clockOutLng: isStillOpen ? null : (prev?.clockOutLng ?? null),
+          clockOutAccuracy: isStillOpen ? null : (prev?.clockOutAccuracy ?? null),
+          clockOutDistanceMeters: isStillOpen ? null : (prev?.clockOutDistanceMeters ?? null),
+          faceVerified,
+          faceVerificationConfidence: prev?.faceVerificationConfidence || '0.96',
+          workedMinutes,
+          workedHours,
+          attendanceStatus,
+          exceptionNotes,
+          entryType: rawEntryType && rawEntryType !== '-' ? rawEntryType : prev?.entryType,
+          exitType: isStillOpen ? undefined : (rawExitType && rawExitType !== '-' ? rawExitType : prev?.exitType),
+          clockInRemarks: rawInRemarks && rawInRemarks !== '-' ? rawInRemarks : (prev?.clockInRemarks || null),
+          clockOutRemarks: isStillOpen ? null : (rawOutRemarks && rawOutRemarks !== '-' ? rawOutRemarks : (prev?.clockOutRemarks || null)),
+          isOutstation,
+          outstationLocation,
+        };
+      }
+
+      // Fallback: 14-column schema
+      const attendanceStatus = String(row[7] || (isStillOpen ? 'IN_PROGRESS' : 'COMPLETED')).trim();
+
+      const rawHours = String(row[8] ?? '').replace(/jam/i, '').trim();
+      const parsedHours = rawHours && rawHours !== '-' ? parseFloat(rawHours) : NaN;
+      const workedHours = !isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null));
+      const workedMinutes = workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null);
+
+      const parsedDist = parseInt(String(row[9] ?? '0'), 10);
+      const clockInDistanceMeters = !isNaN(parsedDist) ? parsedDist : (prev?.clockInDistanceMeters ?? 0);
+
+      const faceVerified = String(row[10] || prev?.faceVerified || 'YES').trim();
+      const rawNotes = String(row[11] ?? '').trim();
+      const exceptionNotes = !rawNotes || rawNotes === '-' ? null : rawNotes;
+      const officeId = String(row[12] || prev?.officeId || 'OFF-01').trim();
+
+      const parsedMeta = parseExceptionMetadata(exceptionNotes);
+      const isOutstation =
+        attendanceStatus === 'OUTSTATION' ||
+        parsedMeta.isOutstation ||
+        Boolean(prev?.isOutstation);
+
+      return {
+        sessionId,
+        employeeId,
+        employeeName,
+        department,
+        officeId,
+        workDate,
+        clockInTimeUTC: prev?.clockInTimeUTC || new Date().toISOString(),
+        clockInTimeKL,
+        clockOutTimeUTC: isStillOpen ? undefined : (prev?.clockOutTimeUTC || new Date().toISOString()),
+        clockOutTimeKL,
+        clockInLat: prev?.clockInLat ?? 5.6432,
+        clockInLng: prev?.clockInLng ?? 100.4912,
+        clockInAccuracy: prev?.clockInAccuracy ?? 10,
+        clockInDistanceMeters,
+        clockOutLat: isStillOpen ? null : (prev?.clockOutLat ?? null),
+        clockOutLng: isStillOpen ? null : (prev?.clockOutLng ?? null),
+        clockOutAccuracy: isStillOpen ? null : (prev?.clockOutAccuracy ?? null),
+        clockOutDistanceMeters: isStillOpen ? null : (prev?.clockOutDistanceMeters ?? null),
+        faceVerified,
+        faceVerificationConfidence: prev?.faceVerificationConfidence || '0.96',
+        workedMinutes,
+        workedHours,
+        attendanceStatus,
+        exceptionNotes,
+        entryType: parsedMeta.entryType || prev?.entryType,
+        exitType: isStillOpen ? undefined : (parsedMeta.exitType || prev?.exitType),
+        clockInRemarks: prev?.clockInRemarks || null,
+        clockOutRemarks: isStillOpen ? null : (prev?.clockOutRemarks || null),
+        isOutstation,
+        outstationLocation: parsedMeta.outstationLocation || prev?.outstationLocation || null,
+      };
+    });
   },
 
   /**
-   * Creates a brand new Halagel Attendance & Employee Database spreadsheet
+   * Parses raw 2D rows from the "Kakitangan" sheet into User[].
    */
-  async createDatabaseSpreadsheet(token: string): Promise<SpreadsheetInfo> {
-    const payload = {
-      properties: {
-        title: `Halagel Pangkalan Data Kehadiran (${new Date().toLocaleDateString('ms-MY')})`,
-      },
-      sheets: [
-        {
-          properties: {
-            title: 'Kehadiran',
-            gridProperties: { rowCount: 1000, columnCount: 14, frozenRowCount: 1 },
-          },
-        },
-        {
-          properties: {
-            title: 'Kakitangan',
-            gridProperties: { rowCount: 500, columnCount: 8, frozenRowCount: 1 },
-          },
-        },
-        {
-          properties: {
-            title: 'Cawangan',
-            gridProperties: { rowCount: 50, columnCount: 7, frozenRowCount: 1 },
-          },
-        },
-      ],
-    };
+  parseEmployeeRows(
+    rows: any[][],
+    existingLocal: (User & { password?: string })[] = []
+  ): (User & { password?: string })[] {
+    if (!Array.isArray(rows)) return [];
 
-    const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    const localMap = new Map<string, User & { password?: string }>();
+    existingLocal.forEach((e) => {
+      if (e.employeeId) localMap.set(e.employeeId.toUpperCase(), e);
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Gagal mencipta Google Sheet pangkalan data');
-    }
+    const validRows = rows.filter((row) => {
+      if (!Array.isArray(row) || row.length === 0) return false;
+      const col0 = String(row[0] ?? '').trim();
+      const col1 = String(row[1] ?? '').trim();
+      if (!col0 && !col1) return false;
+      if (col0.toLowerCase() === 'id staf' || col0.toLowerCase() === 'employeeid') return false;
+      return true;
+    });
 
-    const data = await res.json();
-    const spreadsheetId = data.spreadsheetId;
-    this.setSavedSpreadsheetId(spreadsheetId);
+    return validRows.map((row) => {
+      const employeeId = normalizeSheetEmployeeId(row[0], existingLocal);
+      const prev =
+        localMap.get(employeeId) ||
+        existingLocal.find(
+          (e) =>
+            /^\d+$/.test(e.employeeId) &&
+            /^\d+$/.test(employeeId) &&
+            e.employeeId.replace(/^0+/, '') === employeeId.replace(/^0+/, '')
+        );
+      const name = String(row[1] || prev?.name || employeeId).trim();
+      const email = String(row[2] || prev?.email || `${employeeId.toLowerCase()}@halagel.com`).trim();
+      const department = String(row[3] || prev?.department || 'Pengeluaran & Operasi').trim();
+      const assignedOfficeId = String(row[4] || prev?.assignedOfficeId || 'OFF-01').trim();
+      const rawRole = String(row[5] || prev?.role || 'employee').trim().toLowerCase();
+      const role = rawRole === 'admin' || rawRole === 'pentadbir' ? 'admin' : 'employee';
+      const rawFace = String(row[6] ?? '').trim().toLowerCase();
+      const faceEnrolled =
+        rawFace === 'didaftar' ||
+        rawFace === 'yes' ||
+        rawFace === 'true' ||
+        Boolean(prev?.faceEnrolled);
+      const rawEnrolledAt = String(row[7] ?? '').trim();
+      const faceEnrolledAt =
+        rawEnrolledAt && rawEnrolledAt !== '-' ? rawEnrolledAt : (prev?.faceEnrolledAt || null);
+      const sheetPassword = row[8] ? String(row[8]).trim() : '';
 
-    // Write initial headers
-    await this.initializeHeaders(token, spreadsheetId);
-
-    return {
-      spreadsheetId,
-      title: data.properties.title,
-      spreadsheetUrl: data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
-    };
+      return {
+        employeeId,
+        name,
+        email,
+        department,
+        assignedOfficeId,
+        role,
+        active: prev?.active ?? true,
+        faceEnrolled,
+        faceEnrolledAt,
+        facePhotoUrl: prev?.facePhotoUrl || null,
+        faceBiometricHash: prev?.faceBiometricHash || null,
+        password: sheetPassword || prev?.password || (role === 'admin' ? 'admin123' : 'Password123!'),
+      };
+    });
   },
 
   /**
-   * Populates initial header rows for all 3 tables with styling
+   * Parses raw 2D rows from the "Cawangan" sheet into Office[].
    */
-  async initializeHeaders(token: string, spreadsheetId: string) {
-    const attendanceHeaders = [
-      'Session ID',
-      'ID Staf',
-      'Nama Kakitangan',
-      'Jabatan',
-      'Tarikh',
-      'Waktu Masuk (KL)',
-      'Waktu Keluar (KL)',
-      'Status Kehadiran',
-      'Jumlah Jam',
-      'Jarak Geofens (m)',
-      'Pengesahan Wajah',
-      'Nota Pengecualian',
-      'ID Cawangan',
-      'Tarikh Rekod Kemaskini',
-    ];
+  parseOfficeRows(rows: any[][], existingLocal: Office[] = []): Office[] {
+    if (!Array.isArray(rows)) return [];
 
-    const employeeHeaders = [
-      'ID Staf',
-      'Nama',
-      'Emel',
-      'Jabatan',
-      'ID Cawangan',
-      'Peranan',
-      'Status Wajah',
-      'Tarikh Didaftar',
-    ];
+    const localMap = new Map<string, Office>();
+    existingLocal.forEach((o) => {
+      if (o.officeId) localMap.set(o.officeId.toUpperCase(), o);
+    });
 
-    const officeHeaders = [
-      'ID Cawangan',
-      'Nama Cawangan',
-      'Alamat',
-      'Latitude',
-      'Longitude',
-      'Radius (m)',
-      'Status Aktif',
-    ];
+    const validRows = rows.filter((row) => {
+      if (!Array.isArray(row) || row.length === 0) return false;
+      const col0 = String(row[0] ?? '').trim();
+      const col1 = String(row[1] ?? '').trim();
+      if (!col0 && !col1) return false;
+      if (col0.toLowerCase() === 'id cawangan' || col0.toLowerCase() === 'officeid') return false;
+      return true;
+    });
 
-    const updates = [
-      { range: 'Kehadiran!A1:N1', values: [attendanceHeaders] },
-      { range: 'Kakitangan!A1:H1', values: [employeeHeaders] },
-      { range: 'Cawangan!A1:G1', values: [officeHeaders] },
-    ];
+    return validRows.map((row, idx) => {
+      const officeId = String(row[0] || `OFF-0${idx + 1}`).trim();
+      const prev = localMap.get(officeId.toUpperCase());
+      const name = String(row[1] || prev?.name || 'Cawangan Halagel').trim();
+      const address = String(row[2] || prev?.address || '').trim();
+      const lat = parseFloat(String(row[3] ?? ''));
+      const lng = parseFloat(String(row[4] ?? ''));
+      const rad = parseInt(String(row[5] ?? ''), 10);
+      const rawActive = String(row[6] ?? 'Aktif').trim().toLowerCase();
 
-    for (const update of updates) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(update.range)}?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ values: update.values }),
-        }
+      return {
+        officeId,
+        name,
+        address,
+        latitude: !isNaN(lat) ? lat : (prev?.latitude ?? 5.6432),
+        longitude: !isNaN(lng) ? lng : (prev?.longitude ?? 100.4912),
+        radiusMeters: !isNaN(rad) ? rad : (prev?.radiusMeters ?? 120),
+        maxAccuracyMeters: prev?.maxAccuracyMeters ?? 50,
+        maxAgeSeconds: prev?.maxAgeSeconds ?? 60,
+        active: rawActive !== 'tidak aktif' && rawActive !== 'false',
+      };
+    });
+  },
+
+  /**
+   * Pulls live data from a public Google Sheet via Google Visualization JSON endpoint
+   * if a Spreadsheet ID is configured.
+   */
+  async fetchSheetTabViaGviz(spreadsheetId: string, sheetName: string): Promise<any[][] | null> {
+    try {
+      const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&headers=1&t=${Date.now()}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const text = await res.text();
+      const jsonStart = text.indexOf('{');
+      const jsonEnd = text.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) return null;
+      const json = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+      if (!json.table || !Array.isArray(json.table.rows)) return null;
+
+      return json.table.rows.map((r: any) =>
+        (r.c || []).map((cell: any) => (cell ? (cell.f ?? cell.v ?? '') : ''))
       );
+    } catch {
+      return null;
     }
   },
 
   /**
-   * Appends or updates an attendance record in the Google Sheet
+   * Pulls the latest data from Google Sheets (via Google Apps Script Web App doGet and/or GViz).
+   * Ensures any rows deleted in Google Sheets are also deleted in the app!
    */
-  async saveAttendanceRecord(token: string | null, spreadsheetId: string | null, r: AttendanceRecord) {
+  async pullFromDatabase(
+    existingRecords: AttendanceRecord[],
+    existingEmployees: (User & { password?: string })[],
+    existingOffices: Office[]
+  ): Promise<PullSyncResult> {
     const webhookUrl = this.getSavedWebhookUrl();
+    const savedSheetId = this.getSavedSpreadsheetId();
+
+    let recordsResult: AttendanceRecord[] | null = null;
+    let employeesResult: (User & { password?: string })[] | undefined = undefined;
+    let officesResult: Office[] | undefined = undefined;
+    let spreadsheetInfo: SpreadsheetInfo | undefined = undefined;
+
+    // 1. Pull from Google Apps Script Web App URL (doGet)
     if (webhookUrl) {
       try {
-        await this.saveViaWebhook(webhookUrl, r);
-        return;
+        const sep = webhookUrl.includes('?') ? '&' : '?';
+        const res = await fetch(`${webhookUrl}${sep}action=GET_ALL&t=${Date.now()}`, {
+          method: 'GET',
+          redirect: 'follow',
+        });
+
+        if (res.ok) {
+          const payload = await res.json();
+          if (payload && payload.status === 'ok') {
+            const rawAtt = Array.isArray(payload.records)
+              ? payload.records
+              : Array.isArray(payload.data)
+              ? payload.data
+              : [];
+
+            recordsResult = this.parseAttendanceRows(rawAtt, existingRecords, existingEmployees);
+
+            if (Array.isArray(payload.employees) && payload.employees.length > 0) {
+              const parsedEmps = this.parseEmployeeRows(payload.employees, existingEmployees);
+              if (parsedEmps.length > 0) {
+                employeesResult = parsedEmps;
+              }
+            }
+
+            if (Array.isArray(payload.offices) && payload.offices.length > 0) {
+              const parsedOffs = this.parseOfficeRows(payload.offices, existingOffices);
+              if (parsedOffs.length > 0) {
+                officesResult = parsedOffs;
+              }
+            }
+
+            if (payload.spreadsheetId) {
+              spreadsheetInfo = {
+                spreadsheetId: payload.spreadsheetId,
+                title: payload.spreadsheetName || 'Halagel Google Sheet Database',
+                spreadsheetUrl:
+                  payload.spreadsheetUrl ||
+                  `https://docs.google.com/spreadsheets/d/${payload.spreadsheetId}/edit`,
+              };
+              this.setSavedSpreadsheetId(payload.spreadsheetId);
+              this.setSavedSpreadsheetInfo(spreadsheetInfo);
+            }
+          }
+        }
       } catch (err) {
-        console.warn('Gagal simpan ke Webhook:', err);
+        console.warn('Tidak dapat membaca doGet daripada Google Apps Script:', err);
       }
     }
 
-    if (!token || !spreadsheetId) return;
+    // 2. If a Spreadsheet ID is available, also check GViz for tabs not returned by V1 Apps Script
+    const activeSheetId = spreadsheetInfo?.spreadsheetId || savedSheetId;
+    if (activeSheetId) {
+      try {
+        const [gvizAtt, gvizEmp, gvizOff] = await Promise.all([
+          recordsResult === null ? this.fetchSheetTabViaGviz(activeSheetId, 'Kehadiran') : Promise.resolve(null),
+          !employeesResult ? this.fetchSheetTabViaGviz(activeSheetId, 'Kakitangan') : Promise.resolve(null),
+          !officesResult ? this.fetchSheetTabViaGviz(activeSheetId, 'Cawangan') : Promise.resolve(null),
+        ]);
 
+        if (recordsResult === null && gvizAtt !== null) {
+          recordsResult = this.parseAttendanceRows(gvizAtt, existingRecords, existingEmployees);
+        }
+        if (!employeesResult && gvizEmp !== null && gvizEmp.length > 0) {
+          const parsedEmps = this.parseEmployeeRows(gvizEmp, existingEmployees);
+          if (parsedEmps.length > 0) {
+            employeesResult = parsedEmps;
+          }
+        }
+        if (!officesResult && gvizOff !== null && gvizOff.length > 0) {
+          const parsedOffs = this.parseOfficeRows(gvizOff, existingOffices);
+          if (parsedOffs.length > 0) {
+            officesResult = parsedOffs;
+          }
+        }
+      } catch {
+        // Ignore GViz errors if sheet is private
+      }
+    }
+
+    if (recordsResult !== null) {
+      return {
+        synced: true,
+        records: recordsResult,
+        employees: employeesResult,
+        offices: officesResult,
+        spreadsheetInfo,
+      };
+    }
+
+    return {
+      synced: false,
+      records: existingRecords,
+    };
+  },
+
+  /**
+   * Sends POST request to Google Apps Script using text/plain to avoid CORS preflight
+   * while waiting for completion so Google Sheets updates immediately.
+   */
+  async postToAppsScript(webhookUrl: string, payload: Record<string, any>): Promise<void> {
+    const bodyStr = JSON.stringify(payload);
     try {
-      // First check if the row already exists
-      const readRes = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kehadiran!A:A`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const readData = await readRes.json();
-      const rows: string[][] = readData.values || [];
-      const rowIndex = rows.findIndex((row) => row[0] === r.sessionId);
-
-      const rowValues = [
-        r.sessionId,
-        r.employeeId,
-        r.employeeName,
-        r.department,
-        r.workDate,
-        r.clockInTimeKL,
-        r.clockOutTimeKL || 'Belum Keluar',
-        r.attendanceStatus,
-        r.workedHours ? `${r.workedHours} jam` : '-',
-        r.clockInDistanceMeters ?? 0,
-        r.faceVerified,
-        r.exceptionNotes || '-',
-        r.officeId,
-        new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' }),
-      ];
-
-      if (rowIndex !== -1) {
-        // Update existing row (Row numbers in Google Sheets are 1-based)
-        const rowNumber = rowIndex + 1;
-        await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kehadiran!A${rowNumber}:N${rowNumber}?valueInputOption=USER_ENTERED`,
-          {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ values: [rowValues] }),
-          }
-        );
-      } else {
-        // Append new row
-        await fetch(
-          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kehadiran!A:N:append?valueInputOption=USER_ENTERED`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ values: [rowValues] }),
-          }
-        );
-      }
-    } catch (err) {
-      console.warn('Gagal menyimpan rekod ke Google Sheets:', err);
+      await fetch(webhookUrl, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: bodyStr,
+      });
+    } catch {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: bodyStr,
+      });
     }
   },
 
-  /**
-   * Syncs all data (Attendance, Employees, Offices) to Google Sheets
-   */
-  async syncAllToSheet(
-    token: string,
-    spreadsheetId: string,
-    records: AttendanceRecord[],
-    employees: User[],
-    offices: Office[]
-  ) {
-    // 1. Attendance rows
-    const attRows = records.map((r) => [
-      r.sessionId,
-      r.employeeId,
-      r.employeeName,
-      r.department,
-      r.workDate,
-      r.clockInTimeKL,
-      r.clockOutTimeKL || 'Belum Keluar',
-      r.attendanceStatus,
-      r.workedHours ? `${r.workedHours} jam` : '-',
-      r.clockInDistanceMeters ?? 0,
-      r.faceVerified,
-      r.exceptionNotes || '-',
-      r.officeId,
-      new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' }),
-    ]);
-
-    // 2. Employee rows
-    const empRows = employees.map((e) => [
-      e.employeeId,
-      e.name,
-      e.email,
-      e.department,
-      e.assignedOfficeId,
-      e.role === 'admin' ? 'Pentadbir' : 'Kakitangan',
-      e.faceEnrolled ? 'Didaftar' : 'Belum Daftar',
-      e.faceEnrolledAt || '-',
-    ]);
-
-    // 3. Office rows
-    const offRows = offices.map((o) => [
-      o.officeId,
-      o.name,
-      o.address,
-      o.latitude,
-      o.longitude,
-      o.radiusMeters,
-      o.active ? 'Aktif' : 'Tidak Aktif',
-    ]);
-
-    // Clear and write fresh
-    await this.initializeHeaders(token, spreadsheetId);
-
-    if (attRows.length > 0) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kehadiran!A2:N${attRows.length + 1}?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ values: attRows }),
-        }
-      );
-    }
-
-    if (empRows.length > 0) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kakitangan!A2:H${empRows.length + 1}?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ values: empRows }),
-        }
-      );
-    }
-
-    if (offRows.length > 0) {
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Cawangan!A2:G${offRows.length + 1}?valueInputOption=USER_ENTERED`,
-        {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ values: offRows }),
-        }
-      );
-    }
-  },
-
-  /**
-   * Reads attendance records from the Google Sheet
-   */
-  async readAttendanceRecords(token: string, spreadsheetId: string): Promise<AttendanceRecord[]> {
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Kehadiran!A2:N1000`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    if (!res.ok) {
-      throw new Error('Gagal membaca rekod kehadiran dari Google Sheet');
-    }
-    const data = await res.json();
-    const rows: string[][] = data.values || [];
-
-    return rows.map((row) => ({
-      sessionId: row[0] || '',
-      employeeId: row[1] || '',
-      employeeName: row[2] || '',
-      department: row[3] || '',
-      officeId: row[12] || 'OFF-01',
-      workDate: row[4] || '',
-      clockInTimeUTC: new Date().toISOString(),
-      clockInTimeKL: row[5] || '',
-      clockOutTimeUTC: row[6] && row[6] !== 'Belum Keluar' ? new Date().toISOString() : null,
-      clockOutTimeKL: row[6] && row[6] !== 'Belum Keluar' ? row[6] : null,
-      clockInLat: 5.6432,
-      clockInLng: 100.4912,
-      clockOutLat: null,
-      clockOutLng: null,
-      clockInDistanceMeters: parseInt(row[9] || '0', 10),
-      clockOutDistanceMeters: null,
-      attendanceStatus: (row[7] as any) || 'COMPLETED',
-      workedHours: row[8] ? parseFloat(row[8].replace(' jam', '')) || null : null,
-      faceVerified: (row[10] as any) || 'VERIFIED',
-      exceptionNotes: row[11] !== '-' ? row[11] : null,
-    }));
-  },
-
-  /**
-   * Google Apps Script Webhook Operations (Works without OAuth domain constraints)
-   */
   async saveViaWebhook(webhookUrl: string, record: AttendanceRecord) {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'SAVE_ATTENDANCE', record }),
-    });
+    const safeRecord = {
+      ...record,
+      employeeId: formatEmployeeIdForSheet(record.employeeId),
+    };
+    await this.postToAppsScript(webhookUrl, { action: 'SAVE_ATTENDANCE', record: safeRecord });
   },
 
   async syncViaWebhook(
@@ -453,32 +685,55 @@ export const googleSheetsDb = {
     employees: User[],
     offices: Office[]
   ) {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'SYNC_ALL', records, employees, offices }),
+    const safeRecords = records.map((r) => ({
+      ...r,
+      employeeId: formatEmployeeIdForSheet(r.employeeId),
+    }));
+    const safeEmployees = employees.map((e) => ({
+      ...e,
+      employeeId: formatEmployeeIdForSheet(e.employeeId),
+    }));
+    await this.postToAppsScript(webhookUrl, {
+      action: 'SYNC_ALL',
+      records: safeRecords,
+      employees: safeEmployees,
+      offices,
     });
   },
 
-  async testWebhook(webhookUrl: string): Promise<{ success: boolean; message: string }> {
+  async testWebhook(webhookUrl: string): Promise<{ success: boolean; message: string; recordCount?: number }> {
     try {
-      await fetch(webhookUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'PING', timestamp: new Date().toISOString() }),
+      const sep = webhookUrl.includes('?') ? '&' : '?';
+      const getRes = await fetch(`${webhookUrl}${sep}action=GET_ALL&t=${Date.now()}`, {
+        method: 'GET',
+        redirect: 'follow',
       });
+
+      if (getRes.ok) {
+        const data = await getRes.json().catch(() => null);
+        if (data && data.status === 'ok') {
+          const rows = Array.isArray(data.records) ? data.records : Array.isArray(data.data) ? data.data : [];
+          const valid = this.parseAttendanceRows(rows);
+          return {
+            success: true,
+            recordCount: valid.length,
+            message: `Sambungan Google Sheets Aktif (Dua Hala)! Dikesan ${valid.length} rekod kehadiran semasa di dalam Google Sheet.`,
+          };
+        }
+      }
+
+      await this.postToAppsScript(webhookUrl, { action: 'PING', timestamp: new Date().toISOString() });
       return {
         success: true,
-        message: 'Sambungan Webhook berjaya dihubungi! Pangkalan data Google Apps Script sedia digunakan.',
+        message: 'Sambungan Webhook Google Apps Script berjaya dihubungi! Pangkalan data Google Sheets sedia digunakan.',
       };
     } catch (err: any) {
       return {
         success: false,
-        message: err.message || 'Gagal menghubungi Webhook. Sila pastikan URL adalah sah dan di-deploy dengan pilihan "Anyone".',
+        message:
+          err.message ||
+          'Gagal menghubungi Google Apps Script. Sila pastikan URL adalah sah dan di-deploy dengan akses "Anyone".',
       };
     }
   },
 };
-

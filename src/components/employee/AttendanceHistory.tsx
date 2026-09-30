@@ -26,6 +26,10 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
 
   useEffect(() => {
     loadHistory();
+    const unsubscribe = api.subscribe(() => {
+      loadHistory();
+    });
+    return unsubscribe;
   }, []);
 
   const filteredRecords = records.filter((r) => {
