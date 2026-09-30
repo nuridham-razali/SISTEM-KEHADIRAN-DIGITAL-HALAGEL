@@ -17,4 +17,4 @@
 
 export const DEFAULT_APPS_SCRIPT_URL: string =
   (import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL as string | undefined) ||
-  '';
+  'https://script.google.com/macros/s/AKfycbyge_wrhIsRYU-8fKriqSrQTINdkQybuLqt_LMXYQuoEc8ujx-lKE8NMRTj3MWhtM_s/exec';
