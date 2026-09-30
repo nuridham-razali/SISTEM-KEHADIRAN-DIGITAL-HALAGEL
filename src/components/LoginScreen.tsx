@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { HALAGEL_LOGO } from '../assets/logo';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, AlertCircle, Building2, X, Smartphone, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, User as UserIcon, Lock, ArrowRight, AlertCircle, Building2, X, Smartphone, CheckCircle2 } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
@@ -52,11 +52,11 @@ export const LoginScreen: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Alamat Emel / ID Staf
+              ID Staf
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Mail className="w-4 h-4" />
+                <UserIcon className="w-4 h-4" />
               </div>
               <input
                 type="text"

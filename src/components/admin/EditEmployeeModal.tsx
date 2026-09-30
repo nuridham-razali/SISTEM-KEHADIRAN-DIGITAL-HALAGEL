@@ -31,7 +31,6 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
 
   const [employeeId, setEmployeeId] = useState(employee?.employeeId || '');
   const [name, setName] = useState(employee?.name || '');
-  const [email, setEmail] = useState(employee?.email || '');
   const [department, setDepartment] = useState(employee?.department || DEPARTMENTS[0]);
   const [assignedOfficeId, setAssignedOfficeId] = useState(
     employee?.assignedOfficeId || offices[0]?.officeId || 'OFF-01'
@@ -46,11 +45,12 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     setError(null);
     setSaving(true);
     try {
+      const cleanEmpId = employeeId.trim().toUpperCase();
       if (isCreate) {
         await api.createEmployee({
-          employeeId: employeeId.trim().toUpperCase(),
+          employeeId: cleanEmpId,
           name: name.trim(),
-          email: email.trim().toLowerCase(),
+          email: `${cleanEmpId.toLowerCase()}@halagel.com`,
           department,
           assignedOfficeId,
           role,
@@ -59,7 +59,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       } else {
         await api.updateEmployee(employee.employeeId, {
           name: name.trim(),
-          email: email.trim().toLowerCase(),
+          email: employee.email || `${employee.employeeId.toLowerCase()}@halagel.com`,
           department,
           assignedOfficeId,
           role,
@@ -117,18 +117,6 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="Nama pekerja"
-              className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Alamat Emel</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="emel@halagel.com"
               className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
             />
           </div>

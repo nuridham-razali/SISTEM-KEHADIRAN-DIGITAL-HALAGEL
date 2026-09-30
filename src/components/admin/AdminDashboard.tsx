@@ -541,8 +541,10 @@ export const AdminDashboard: React.FC = () => {
                     </span>
                   </div>
                   <h4 className="font-bold text-sm text-white">{emp.name}</h4>
-                  <p className="text-xs text-slate-400">{emp.email}</p>
-                  <p className="text-[11px] text-emerald-400 mt-1">{emp.department}</p>
+                  <p className="text-xs text-emerald-400 font-medium">{emp.department}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {offices.find(o => o.officeId === emp.assignedOfficeId)?.name || 'Cawangan Rasmi'}
+                  </p>
                   <div className="mt-2 text-[10px] text-slate-500">
                     Wajah: {emp.faceEnrolled ? '✓ Didaftar' : '✗ Belum Daftar'}
                   </div>

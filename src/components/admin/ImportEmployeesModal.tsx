@@ -17,10 +17,10 @@ export const ImportEmployeesModal: React.FC<ImportEmployeesModalProps> = ({ onCl
 
   const downloadTemplate = () => {
     const template =
-      'employeeId,name,email,department,assignedOfficeId,role,password\n' +
-      'EMP104,Mohd Faiz,faiz@halagel.com,Kawalan Kualiti (QC),OFF-01,employee,Password123!\n' +
-      'EMP105,Siti Aminah,aminah@halagel.com,Kewangan & Perakaunan,OFF-02,employee,Password123!\n' +
-      'EMP106,Ahmad Zaki,zaki@halagel.com,Logistik & Stor,OFF-01,employee,Password123!\n';
+      'employeeId,name,department,assignedOfficeId,role,password\n' +
+      'EMP104,Mohd Faiz,Kawalan Kualiti (QC),OFF-01,employee,Password123!\n' +
+      'EMP105,Siti Aminah,Kewangan & Perakaunan,OFF-02,employee,Password123!\n' +
+      'EMP106,Ahmad Zaki,Logistik & Stor,OFF-01,employee,Password123!\n';
 
     const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

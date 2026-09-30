@@ -17,4 +17,4 @@
 
 export const DEFAULT_APPS_SCRIPT_URL: string =
   (import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL as string | undefined) ||
-  ''; // <-- Masukkan URL Web App Google Apps Script anda di sini jika mahu kekal dalam kod terus
+  '';
