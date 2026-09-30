@@ -218,7 +218,8 @@ class HalagelApiService {
     const userRecords = allRecords.filter((r) => r.employeeId === user.employeeId);
     const todayRecords = userRecords.filter((r) => r.workDate === todayStr);
 
-    const openSession = todayRecords.find((r) => r.attendanceStatus === 'IN_PROGRESS') || null;
+    // Open session is strictly any session today where clock-out has not occurred yet
+    const openSession = todayRecords.find((r) => !r.clockOutTimeKL && !r.clockOutTimeUTC) || null;
 
     const timeKLString = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Kuala_Lumpur',
@@ -238,7 +239,7 @@ class HalagelApiService {
     let statusSummary: 'NOT_CLOCKED_IN' | 'IN_PROGRESS' | 'COMPLETED' = 'NOT_CLOCKED_IN';
     if (openSession) {
       statusSummary = 'IN_PROGRESS';
-    } else if (todayRecords.some((r) => r.attendanceStatus === 'COMPLETED')) {
+    } else if (todayRecords.length > 0) {
       statusSummary = 'COMPLETED';
     }
 
@@ -292,6 +293,10 @@ class HalagelApiService {
     accuracyMeters: number;
     challengeId?: string;
     biometricTemplate?: string;
+    entryType?: string;
+    remarks?: string;
+    isOutstation?: boolean;
+    outstationLocation?: string;
   }): Promise<AttendanceRecord> {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
@@ -305,16 +310,21 @@ class HalagelApiService {
       office.longitude
     );
 
-    // STRICT GEOFENCE ENFORCEMENT: Block clock-in if outside office radius!
-    if (dist > office.radiusMeters) {
+    const isOut = Boolean(payload.isOutstation);
+
+    // GEOFENCE ENFORCEMENT:
+    // If not outstation: must be within office radius!
+    if (!isOut && dist > office.radiusMeters) {
       throw new Error(
-        `Rakam kehadiran masuk TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${dist}m > ${office.radiusMeters}m). Anda mesti berada dalam kawasan pejabat untuk merakam kehadiran.`
+        `Rakam kehadiran masuk TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${Math.round(dist)}m > ${office.radiusMeters}m). Jika anda bertugas di luar kawasan, sila pilih mod 'Kerja Luar Kawasan (Outstation)'.`
       );
     }
 
     const now = new Date();
     const dateKL = now.toISOString().slice(0, 10);
     const evalIn = evaluateClockIn(now);
+
+    const entryLabel = payload.entryType || (isOut ? 'Kerja Luar Kawasan (Outstation)' : 'Datang Bekerja');
 
     const newRecord: AttendanceRecord = {
       sessionId: 'ATT-' + Date.now(),
@@ -328,11 +338,17 @@ class HalagelApiService {
       clockInLat: payload.latitude,
       clockInLng: payload.longitude,
       clockInAccuracy: payload.accuracyMeters,
-      clockInDistanceMeters: dist,
+      clockInDistanceMeters: Math.round(dist),
       faceVerified: 'YES',
       faceVerificationConfidence: payload.biometricTemplate ? '0.98' : '0.96',
-      attendanceStatus: evalIn.isLate ? 'LAMBAT' : 'IN_PROGRESS',
-      exceptionNotes: evalIn.notes,
+      attendanceStatus: isOut ? 'OUTSTATION' : (evalIn.isLate ? 'LAMBAT' : 'IN_PROGRESS'),
+      entryType: entryLabel,
+      clockInRemarks: payload.remarks || null,
+      isOutstation: isOut,
+      outstationLocation: payload.outstationLocation || null,
+      exceptionNotes: isOut
+        ? `[OUTSTATION: ${payload.outstationLocation || 'Luar Kawasan'}] ${entryLabel}${payload.remarks ? ` (${payload.remarks})` : ''}`
+        : (payload.remarks ? `[${entryLabel}] ${payload.remarks}` : `[${entryLabel}] ${evalIn.notes}`),
     };
 
     const records = this.getAttendanceList();
@@ -362,6 +378,10 @@ class HalagelApiService {
     accuracyMeters: number;
     challengeId?: string;
     biometricTemplate?: string;
+    exitType?: string;
+    remarks?: string;
+    isOutstation?: boolean;
+    outstationLocation?: string;
   }): Promise<AttendanceRecord> {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
@@ -375,20 +395,24 @@ class HalagelApiService {
       office.longitude
     );
 
-    // Check radius for clock-out
-    if (dist > office.radiusMeters) {
+    const isOut = Boolean(payload.isOutstation);
+
+    // Check radius for clock-out if not outstation
+    if (!isOut && dist > office.radiusMeters) {
       throw new Error(
-        `Rakam kehadiran keluar TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${dist}m > ${office.radiusMeters}m).`
+        `Rakam kehadiran keluar TIDAK DIBENARKAN kerana anda berada di luar radius zon pejabat (${Math.round(dist)}m > ${office.radiusMeters}m). Jika anda bertugas di luar kawasan, sila pilih mod 'Kerja Luar Kawasan (Outstation)'.`
       );
     }
 
     const records = this.getAttendanceList();
+    // Find open session strictly (no clock out yet)
     const session = records.find(
-      (r) => r.employeeId === user.employeeId && (r.attendanceStatus === 'IN_PROGRESS' || r.attendanceStatus === 'LAMBAT' || !r.clockOutTimeKL)
+      (r) => r.employeeId === user.employeeId && !r.clockOutTimeKL && !r.clockOutTimeUTC
     );
 
     const now = new Date();
     const dateKL = now.toISOString().slice(0, 10);
+    const exitLabel = payload.exitType || (isOut ? 'Keluar Luar Kawasan (Outstation)' : 'Balik / Tamat Kerja');
 
     if (session) {
       const evalOut = evaluateAttendanceSession(new Date(session.clockInTimeUTC), now);
@@ -398,11 +422,45 @@ class HalagelApiService {
       session.clockOutLat = payload.latitude;
       session.clockOutLng = payload.longitude;
       session.clockOutAccuracy = payload.accuracyMeters;
-      session.clockOutDistanceMeters = dist;
+      session.clockOutDistanceMeters = Math.round(dist);
       session.workedMinutes = evalOut.workedMinutes;
       session.workedHours = evalOut.workedHours;
-      session.attendanceStatus = evalOut.attendanceStatus;
-      session.exceptionNotes = evalOut.notes;
+      session.exitType = exitLabel;
+      session.clockOutRemarks = payload.remarks || null;
+      if (isOut) {
+        session.isOutstation = true;
+        session.outstationLocation = payload.outstationLocation || session.outstationLocation || 'Luar Kawasan';
+      }
+
+      // Calculate today's cumulative worked hours across all sessions
+      const todayOtherRecords = records.filter(
+        (r) => r.employeeId === user.employeeId && r.workDate === dateKL && r.sessionId !== session.sessionId && (r.workedHours || 0) > 0
+      );
+      const totalTodayHours = todayOtherRecords.reduce((acc, curr) => acc + (curr.workedHours || 0), session.workedHours || 0);
+
+      // Determine movement status
+      if (exitLabel.includes('Rehat')) {
+        session.attendanceStatus = 'REHAT';
+      } else if (exitLabel.includes('Urusan') || exitLabel.includes('Beli Barang') || exitLabel.includes('Pembelian')) {
+        session.attendanceStatus = 'URUSAN_LUAR';
+      } else if (isOut || session.isOutstation) {
+        session.attendanceStatus = 'OUTSTATION';
+      } else if (totalTodayHours >= 8.0) {
+        session.attendanceStatus = 'COMPLETED';
+      } else {
+        session.attendanceStatus = evalOut.attendanceStatus || 'COMPLETED';
+      }
+
+      const noteParts = [];
+      if (session.entryType) {
+        noteParts.push(`Masuk: ${session.entryType}${session.clockInRemarks ? ` (${session.clockInRemarks})` : ''}`);
+      }
+      noteParts.push(`Keluar: ${exitLabel}${payload.remarks ? ` (${payload.remarks})` : ''}`);
+      if (session.isOutstation && session.outstationLocation) {
+        noteParts.push(`[Lokasi: ${session.outstationLocation}]`);
+      }
+      session.exceptionNotes = noteParts.join(' • ');
+
       this.saveAttendanceList(records);
 
       // Real-time background sync to Google Sheets if connected
@@ -435,17 +493,21 @@ class HalagelApiService {
         clockInLat: payload.latitude,
         clockInLng: payload.longitude,
         clockInAccuracy: payload.accuracyMeters,
-        clockInDistanceMeters: dist,
+        clockInDistanceMeters: Math.round(dist),
         clockOutLat: payload.latitude,
         clockOutLng: payload.longitude,
         clockOutAccuracy: payload.accuracyMeters,
-        clockOutDistanceMeters: dist,
+        clockOutDistanceMeters: Math.round(dist),
         faceVerified: 'YES',
         faceVerificationConfidence: '0.96',
         workedMinutes: 480,
         workedHours: 8,
-        attendanceStatus: 'COMPLETED',
-        exceptionNotes: 'Selesai 8 jam bekerja.',
+        attendanceStatus: isOut ? 'OUTSTATION' : 'COMPLETED',
+        exitType: exitLabel,
+        clockOutRemarks: payload.remarks || null,
+        isOutstation: isOut,
+        outstationLocation: payload.outstationLocation || null,
+        exceptionNotes: `Keluar: ${exitLabel}${payload.remarks ? ` (${payload.remarks})` : ''}`,
       };
       records.unshift(fallbackRecord);
       this.saveAttendanceList(records);

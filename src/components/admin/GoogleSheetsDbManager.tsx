@@ -129,6 +129,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(googleSheetsDb.getSavedSpreadsheetId());
   const [sheetInfo, setSheetInfo] = useState<SpreadsheetInfo | null>(() => googleSheetsDb.getSavedSpreadsheetInfo());
   const [loading, setLoading] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [customSheetInput, setCustomSheetInput] = useState('');
   const [showConfirmSyncModal, setShowConfirmSyncModal] = useState(false);
@@ -250,6 +251,40 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
     await cloudConfigService.saveConfigToCloud({ webhookUrl: null });
     setWebhookUrlInput('');
     setStatusMessage({ type: 'info', text: 'Sambungan Webhook telah diputuskan di semua peranti.' });
+  };
+
+  const handleTestWebhook = async () => {
+    const url = webhookUrlInput.trim() || googleSheetsDb.getSavedWebhookUrl();
+    if (!url) {
+      setStatusMessage({ type: 'error', text: 'Sila masukkan Web App URL Google Apps Script untuk diuji.' });
+      return;
+    }
+    setTestingWebhook(true);
+    setStatusMessage(null);
+    try {
+      const res = await googleSheetsDb.testWebhook(url);
+      if (res.success) {
+        setStatusMessage({ type: 'success', text: res.message });
+      } else {
+        setStatusMessage({ type: 'error', text: res.message });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err.message || 'Ralat semasa menguji Webhook.' });
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
+  const handleResetToDefaultWebhook = () => {
+    const def = googleSheetsDb.resetToDefaultWebhookUrl();
+    setWebhookUrlInput(def || '');
+    setStatusMessage({
+      type: 'info',
+      text: def
+        ? 'Tetapan telah ditetapkan semula kepada URL kod asal / pembolehubah Vercel (src/config/database.ts).'
+        : 'Tetapan tempatan telah dipadam.',
+    });
+    onDataChanged();
   };
 
   const handleGoogleLogin = async () => {
@@ -534,9 +569,20 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
 
           {/* Webhook Input and Action */}
           <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-700/80 space-y-3">
-            <label className="block text-xs font-bold text-white">
-              Masukkan Web App URL Google Apps Script:
-            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <label className="block text-xs font-bold text-white">
+                Web App URL Google Apps Script:
+              </label>
+              {googleSheetsDb.getDefaultWebhookUrl() && (
+                <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1 self-start sm:self-auto">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  {googleSheetsDb.isUsingDefaultWebhook()
+                    ? '✓ Menggunakan URL Kod Asal (src/config/database.ts)'
+                    : 'Tetapan Diubah Suai Tempatan'}
+                </span>
+              )}
+            </div>
+
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="relative flex-1">
                 <Link className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -553,17 +599,42 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
                 type="button"
                 disabled={loading || !webhookUrlInput.trim()}
                 onClick={handleSaveWebhook}
-                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
               >
                 <Check className="w-4 h-4" />
-                <span>{loading ? 'Menyambung...' : 'Simpan & Segerak Sekarang'}</span>
+                <span>{loading ? 'Menyambung...' : 'Simpan & Segerak'}</span>
               </button>
+
+              <button
+                type="button"
+                disabled={testingWebhook || !webhookUrlInput.trim()}
+                onClick={handleTestWebhook}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 border border-slate-600/60"
+              >
+                {testingWebhook ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                )}
+                <span>{testingWebhook ? 'Menguji...' : 'Uji Sambungan'}</span>
+              </button>
+
+              {googleSheetsDb.getDefaultWebhookUrl() && !googleSheetsDb.isUsingDefaultWebhook() && (
+                <button
+                  type="button"
+                  onClick={handleResetToDefaultWebhook}
+                  title="Tetapkan semula kepada URL kod lalai"
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold transition cursor-pointer shrink-0"
+                >
+                  Guna URL Kod Asal
+                </button>
+              )}
 
               {isWebhookActive && (
                 <button
                   type="button"
                   onClick={handleRemoveWebhook}
-                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 text-xs font-semibold transition cursor-pointer"
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 text-xs font-semibold transition cursor-pointer shrink-0"
                 >
                   Padam
                 </button>
@@ -572,10 +643,38 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
 
             {isWebhookActive && (
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold pt-1">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Pangkalan data Webhook aktif! Setiap Clock In / Out akan terus direkod ke Google Sheet secara automatik.</span>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Pangkalan data Webhook sedia aktif! Setiap Clock In / Out dari semua telefon pekerja akan terus direkod ke Google Sheet secara automatik.</span>
               </div>
             )}
+
+            {/* Vercel Multi-Device Guide */}
+            <div className="mt-3 p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-slate-300 space-y-2">
+              <div className="font-bold text-blue-300 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+                <span>Panduan Sambungan Automatik Merentasi Semua Peranti di Vercel</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Untuk memastikan <strong>mana-mana peranti staf (telefon Android, iPhone, tablet)</strong> terus berhubung dengan pangkalan data Google Sheet yang sama sebaik sahaja membuka web di domain Vercel anda:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="font-bold text-emerald-400">Pilihan 1 (Vercel Environment Variable):</div>
+                  <p className="text-slate-400">
+                    Buka <strong>Vercel Dashboard &gt; Settings &gt; Environment Variables</strong>, tambah:
+                  </p>
+                  <code className="block bg-slate-950 p-1.5 rounded text-emerald-300 font-mono text-[10px] select-all">
+                    VITE_GOOGLE_APPS_SCRIPT_URL = {webhookUrlInput || 'URL_WEB_APP_ANDA'}
+                  </code>
+                </div>
+                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="font-bold text-emerald-400">Pilihan 2 (Terus dalam Fail Kod):</div>
+                  <p className="text-slate-400">
+                    Buka fail kod <code>src/config/database.ts</code> dan letakkan URL Web App Google Apps Script anda pada pembolehubah <code>DEFAULT_APPS_SCRIPT_URL</code>.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

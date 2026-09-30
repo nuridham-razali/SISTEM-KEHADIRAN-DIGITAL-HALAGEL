@@ -1,4 +1,5 @@
 import { AttendanceRecord, User, Office } from '../types';
+import { DEFAULT_APPS_SCRIPT_URL } from '../config/database';
 
 const SPREADSHEET_KEY = 'halagel_google_spreadsheet_id_v1';
 const SPREADSHEET_INFO_KEY = 'halagel_google_spreadsheet_info_v1';
@@ -38,7 +39,37 @@ export const googleSheetsDb = {
   },
 
   getSavedWebhookUrl(): string | null {
-    return localStorage.getItem(WEBHOOK_KEY);
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(WEBHOOK_KEY);
+      if (stored && stored.trim() !== '') {
+        return stored.trim();
+      }
+    }
+    // Fallback to in-code default or Vercel environment variable
+    if (DEFAULT_APPS_SCRIPT_URL && DEFAULT_APPS_SCRIPT_URL.trim() !== '') {
+      return DEFAULT_APPS_SCRIPT_URL.trim();
+    }
+    return null;
+  },
+
+  getDefaultWebhookUrl(): string {
+    return DEFAULT_APPS_SCRIPT_URL || '';
+  },
+
+  isUsingDefaultWebhook(): boolean {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(WEBHOOK_KEY);
+      if (!stored && DEFAULT_APPS_SCRIPT_URL) return true;
+      if (stored && stored.trim() === DEFAULT_APPS_SCRIPT_URL.trim()) return true;
+    }
+    return Boolean(DEFAULT_APPS_SCRIPT_URL);
+  },
+
+  resetToDefaultWebhookUrl(): string | null {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(WEBHOOK_KEY);
+    }
+    return DEFAULT_APPS_SCRIPT_URL || null;
   },
 
   setSavedWebhookUrl(url: string) {
@@ -429,4 +460,25 @@ export const googleSheetsDb = {
       body: JSON.stringify({ action: 'SYNC_ALL', records, employees, offices }),
     });
   },
+
+  async testWebhook(webhookUrl: string): Promise<{ success: boolean; message: string }> {
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'PING', timestamp: new Date().toISOString() }),
+      });
+      return {
+        success: true,
+        message: 'Sambungan Webhook berjaya dihubungi! Pangkalan data Google Apps Script sedia digunakan.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Gagal menghubungi Webhook. Sila pastikan URL adalah sah dan di-deploy dengan pilihan "Anyone".',
+      };
+    }
+  },
 };
+

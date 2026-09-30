@@ -138,7 +138,10 @@ export const AdminDashboard: React.FC = () => {
       statusFilter === 'ALL' ||
       (statusFilter === 'COMPLETED' && r.attendanceStatus === 'COMPLETED') ||
       (statusFilter === 'IN_PROGRESS' && r.attendanceStatus === 'IN_PROGRESS') ||
-      (statusFilter === 'EXCEPTION' && r.attendanceStatus.startsWith('EXCEPTION_'));
+      (statusFilter === 'URUSAN_LUAR' && (r.attendanceStatus === 'URUSAN_LUAR' || (r.exitType && r.exitType.includes('Urusan')))) ||
+      (statusFilter === 'REHAT' && (r.attendanceStatus === 'REHAT' || (r.exitType && r.exitType.includes('Rehat')))) ||
+      (statusFilter === 'OUTSTATION' && (r.isOutstation || r.attendanceStatus === 'OUTSTATION')) ||
+      (statusFilter === 'EXCEPTION' && (r.attendanceStatus.startsWith('EXCEPTION_') || r.attendanceStatus === 'LAMBAT'));
 
     return matchSearch && matchStatus;
   });
@@ -344,14 +347,24 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
-            <div className="flex gap-2">
-              {['ALL', 'COMPLETED', 'IN_PROGRESS', 'EXCEPTION'].map((s) => (
+            <div className="flex gap-1.5 flex-wrap">
+              {[
+                { id: 'ALL', label: 'Semua' },
+                { id: 'COMPLETED', label: 'Selesai' },
+                { id: 'IN_PROGRESS', label: 'Sedang Berjalan' },
+                { id: 'URUSAN_LUAR', label: 'Urusan Luar / Beli Barang' },
+                { id: 'REHAT', label: 'Rehat' },
+                { id: 'OUTSTATION', label: 'Outstation' },
+                { id: 'EXCEPTION', label: 'Luar Biasa / Lambat' },
+              ].map((s) => (
                 <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition ${statusFilter === s ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                  key={s.id}
+                  onClick={() => setStatusFilter(s.id)}
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer ${
+                    statusFilter === s.id ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
                 >
-                  {s === 'ALL' ? 'Semua' : s === 'COMPLETED' ? 'Selesai' : s === 'IN_PROGRESS' ? 'Berjalan' : 'Luar Radius'}
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -368,22 +381,45 @@ export const AdminDashboard: React.FC = () => {
                   key={r.sessionId}
                   className="p-3.5 rounded-2xl bg-[#182234] border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:border-slate-700 transition"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white text-xs">{r.employeeName}</span>
                       <span className="text-[10px] text-slate-400">({r.employeeId})</span>
                       <span className="text-[10px] text-slate-400">• {r.department}</span>
+                      {r.isOutstation && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          🚗 Outstation {r.outstationLocation ? `(${r.outstationLocation})` : ''}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-300 mt-1">
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-300">
                       <span>Tarikh: <strong>{r.workDate}</strong></span>
-                      <span>Masuk: <strong>{r.clockInTimeKL}</strong></span>
-                      <span>Keluar: <strong>{r.clockOutTimeKL || 'Belum Keluar'}</strong></span>
-                      <span>Jarak: <strong>{r.clockInDistanceMeters ?? 0}m</strong></span>
+                      <span>Masuk: <strong className="text-emerald-300">{r.clockInTimeKL}</strong></span>
+                      <span>Keluar: <strong className="text-amber-300">{r.clockOutTimeKL || 'Belum Keluar'}</strong></span>
+                      <span>Geofens: <strong>{r.isOutstation ? 'Outstation' : `${r.clockInDistanceMeters ?? 0}m`}</strong></span>
                       {r.workedHours && (
                         <span>Jumlah: <strong className="text-emerald-400">{r.workedHours} jam</strong></span>
                       )}
                     </div>
-                    {r.exceptionNotes && (
+
+                    {/* Entry and Exit Remarks Display */}
+                    {(r.entryType || r.exitType || r.clockInRemarks || r.clockOutRemarks) && (
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] pt-0.5">
+                        {r.entryType && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                            Masuk: <strong>{r.entryType}</strong> {r.clockInRemarks ? `("${r.clockInRemarks}")` : ''}
+                          </span>
+                        )}
+                        {r.exitType && (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                            Keluar: <strong>{r.exitType}</strong> {r.clockOutRemarks ? `("${r.clockOutRemarks}")` : ''}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {r.exceptionNotes && !r.entryType && !r.exitType && (
                       <div className="mt-1 text-[10px] text-amber-300/90 bg-amber-500/10 px-2 py-0.5 rounded-md inline-block">
                         {r.exceptionNotes}
                       </div>
@@ -397,17 +433,27 @@ export const AdminDashboard: React.FC = () => {
                           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                           : r.attendanceStatus === 'IN_PROGRESS'
                           ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                          : r.attendanceStatus === 'URUSAN_LUAR'
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                          : r.attendanceStatus === 'REHAT'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : r.attendanceStatus === 'OUTSTATION'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                           : r.attendanceStatus === 'LAMBAT'
                           ? 'bg-red-500/15 text-red-400 border border-red-500/30'
-                          : r.attendanceStatus === 'AWAL_KELUAR'
-                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                          : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : 'bg-slate-800 text-slate-300 border border-slate-700'
                       }`}
                     >
                       {r.attendanceStatus === 'COMPLETED'
                         ? 'Tepat Masa (Cukup 8 Jam)'
                         : r.attendanceStatus === 'IN_PROGRESS'
                         ? 'Sedang Bekerja'
+                        : r.attendanceStatus === 'URUSAN_LUAR'
+                        ? 'Urusan Luar / Beli Barang'
+                        : r.attendanceStatus === 'REHAT'
+                        ? 'Keluar Rehat'
+                        : r.attendanceStatus === 'OUTSTATION'
+                        ? 'Luar Kawasan (Outstation)'
                         : r.attendanceStatus === 'LAMBAT'
                         ? 'Lambat'
                         : r.attendanceStatus === 'AWAL_KELUAR'
@@ -416,7 +462,7 @@ export const AdminDashboard: React.FC = () => {
                     </span>
                     <button
                       onClick={() => setCorrectingRecord(r)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition"
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
                     >
                       <Edit className="w-3 h-3" />
                       <span>Laras</span>

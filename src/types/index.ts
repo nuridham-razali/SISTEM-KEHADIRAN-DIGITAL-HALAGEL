@@ -49,8 +49,14 @@ export interface AttendanceRecord {
   faceVerificationConfidence?: string | null;
   workedMinutes?: number | null;
   workedHours?: number | null;
-  attendanceStatus: 'IN_PROGRESS' | 'COMPLETED' | 'EXCEPTION_OUTSIDE_RADIUS' | 'EXCEPTION_MISSING_CLOCK_OUT' | 'CORRECTED' | string;
+  attendanceStatus: 'IN_PROGRESS' | 'COMPLETED' | 'EXCEPTION_OUTSIDE_RADIUS' | 'EXCEPTION_MISSING_CLOCK_OUT' | 'CORRECTED' | 'OUTSTATION' | 'URUSAN_LUAR' | 'REHAT' | 'LAMBAT' | string;
   exceptionNotes?: string | null;
+  entryType?: string; // cth: 'Datang Bekerja', 'Masuk Urusan Luar', 'Masuk Rehat', 'Kerja Luar Kawasan (Outstation)'
+  exitType?: string; // cth: 'Balik / Tamat Kerja', 'Keluar Urusan Kerja', 'Keluar Rehat', 'Keluar Luar Kawasan (Outstation)'
+  clockInRemarks?: string | null;
+  clockOutRemarks?: string | null;
+  isOutstation?: boolean;
+  outstationLocation?: string | null;
 }
 
 export interface VerificationChallenge {

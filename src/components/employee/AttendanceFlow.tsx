@@ -16,9 +16,14 @@ import {
   AlertTriangle,
   UserCheck,
   ShieldCheck,
-  Sparkles,
   Lock,
   AlertOctagon,
+  Car,
+  Coffee,
+  Briefcase,
+  Home,
+  MessageSquare,
+  Navigation,
 } from 'lucide-react';
 
 interface AttendanceFlowProps {
@@ -26,6 +31,9 @@ interface AttendanceFlowProps {
   onClose: () => void;
   onSuccess: () => void;
   onNavigateToFaceEnrol?: () => void;
+  initialEntryType?: string;
+  initialExitType?: string;
+  initialIsOutstation?: boolean;
 }
 
 export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
@@ -33,6 +41,9 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   onClose,
   onSuccess,
   onNavigateToFaceEnrol,
+  initialEntryType,
+  initialExitType,
+  initialIsOutstation = false,
 }) => {
   const { user } = useAuth();
   const {
@@ -49,9 +60,23 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   const [recognitionStage, setRecognitionStage] = useState<'idle' | 'detecting' | 'matching' | 'matched' | 'failed'>('idle');
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [_capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [enrolledPhoto, setEnrolledPhoto] = useState<string | null>(null);
+
+  // Outstation Mode State
+  const [isOutstationMode, setIsOutstationMode] = useState<boolean>(initialIsOutstation);
+  const [outstationLocation, setOutstationLocation] = useState<string>('');
+
+  // Remark & Preset States
+  const defaultInPreset = initialEntryType || 'Datang Bekerja (Masuk Pagi / Syif Awal)';
+  const defaultOutPreset = initialExitType || 'Balik / Tamat Waktu Bekerja';
+  const [selectedPreset, setSelectedPreset] = useState<string>(
+    initialIsOutstation
+      ? (isClockIn ? 'Daftar Masuk Luar Kawasan (Outstation)' : 'Daftar Keluar Luar Kawasan (Outstation)')
+      : (isClockIn ? defaultInPreset : defaultOutPreset)
+  );
+  const [customRemark, setCustomRemark] = useState<string>('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -90,6 +115,17 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     }, 600);
   };
 
+  // Toggle Outstation Mode
+  const handleToggleOutstation = (enable: boolean) => {
+    setIsOutstationMode(enable);
+    setErrorMessage(null);
+    if (enable) {
+      setSelectedPreset(isClockIn ? 'Daftar Masuk Luar Kawasan (Outstation)' : 'Daftar Keluar Luar Kawasan (Outstation)');
+    } else {
+      setSelectedPreset(isClockIn ? 'Datang Bekerja (Masuk Pagi / Syif Awal)' : 'Balik / Tamat Waktu Bekerja');
+    }
+  };
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -108,10 +144,24 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   };
 
   const proceedToPhotoStep = async () => {
-    if (!isInsideRadius) {
-      setErrorMessage('Anda berada di luar radius zon pejabat. Rakam kehadiran masuk tidak dibenarkan.');
+    setErrorMessage(null);
+
+    // If Normal Kilang mode: STRICT GEOFENCE ENFORCEMENT
+    if (!isOutstationMode && !isInsideRadius) {
+      setErrorMessage(
+        `Anda berada di luar radius zon pejabat (${distanceToOffice ?? 0}m > ${assignedOffice?.radiusMeters}m). Rakam kehadiran diblok. Jika anda bertugas di luar kawasan, sila pilih mod 'Kerja Luar Kawasan (Outstation)'.`
+      );
       return;
     }
+
+    // If Outstation mode: MUST provide outstation location
+    if (isOutstationMode && !outstationLocation.trim()) {
+      setErrorMessage(
+        'Sila masukkan nama lokasi / destinasi luar kawasan anda (contoh: Nama pembekal, tapak projek, atau bandar) sebelum meneruskan.'
+      );
+      return;
+    }
+
     setCurrentStep(2);
     setRecognitionStage('idle');
     setErrorMessage(null);
@@ -126,7 +176,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     };
   }, []);
 
-  // Run Real AI Facial Recognition & Strict Biometric Verification
+  // Run Real AI Facial Recognition & Biometric Verification
   const handleRunFaceRecognition = async () => {
     setErrorMessage(null);
     if (!videoRef.current) {
@@ -176,13 +226,11 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       }
     }
 
-    // If no vector stored, generate or fetch fallback if user had enrolled
+    // If no vector stored, generate fallback if user had enrolled
     if (!enrolledVector && user?.faceEnrolled) {
-      // Re-seed deterministic template vector from employee ID seed
       enrolledVector = new Array(128).fill(0).map((_, i) =>
         Math.sin((user.employeeId.charCodeAt(0) || 65) * (i + 1))
       );
-      // Normalize
       const norm = Math.sqrt(enrolledVector.reduce((acc, v) => acc + v * v, 0)) || 1;
       enrolledVector = enrolledVector.map((v) => v / norm);
       localStorage.setItem(`halagel_face_vector_${user.employeeId}`, JSON.stringify(enrolledVector));
@@ -219,6 +267,11 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
           longitude: userLocation?.longitude || assignedOffice?.longitude || 100.4912,
           accuracyMeters: userLocation?.accuracy || 10,
           biometricTemplate: JSON.stringify(detection.vector!.slice(0, 8)),
+          entryType: isClockIn ? selectedPreset : undefined,
+          exitType: !isClockIn ? selectedPreset : undefined,
+          remarks: customRemark.trim() || undefined,
+          isOutstation: isOutstationMode,
+          outstationLocation: isOutstationMode ? outstationLocation.trim() : undefined,
         };
 
         if (isClockIn) {
@@ -234,7 +287,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
       } catch (err: any) {
         setIsRecognizing(false);
         setRecognitionStage('failed');
-        setErrorMessage(err.message || 'Gagal merekod kehadiran. Sila pastikan anda berada dalam radius pejabat.');
+        setErrorMessage(err.message || 'Gagal merekod kehadiran. Sila semak sambungan atau status geofens anda.');
       }
     }, 700);
   };
@@ -293,20 +346,44 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
     );
   }
 
+  // Presets definition
+  const clockInPresets = [
+    { id: 'Datang Bekerja (Masuk Pagi / Syif Awal)', label: 'Datang Bekerja (Pagi / Awal)', icon: Building2, desc: 'Masuk bertugas waktu pagi' },
+    { id: 'Masuk Semula (Selepas Urusan Kerja / Pembelian Luar)', label: 'Masuk Semula (Urusan Luar / Beli Barang)', icon: Briefcase, desc: 'Masuk selepas beli barang/urusan kilang' },
+    { id: 'Masuk Semula (Selepas Rehat / Makan)', label: 'Masuk Semula (Selepas Rehat)', icon: Coffee, desc: 'Masuk semula lepas makan/rehat' },
+    { id: 'Daftar Masuk Luar Kawasan (Outstation)', label: 'Daftar Masuk Outstation', icon: Car, desc: 'Masuk bertugas di luar kawasan kilang' },
+    { id: 'Lain-lain Catatan Masuk', label: 'Lain-lain Catatan Masuk', icon: MessageSquare, desc: 'Nyatakan sebab pada kotak catatan' },
+  ];
+
+  const clockOutPresets = [
+    { id: 'Balik / Tamat Waktu Bekerja', label: 'Balik / Tamat Syif Bekerja', icon: Home, desc: 'Tamat waktu bekerja harian' },
+    { id: 'Keluar Kilang (Urusan Kerja / Pembelian Barang)', label: 'Keluar Urusan Kerja / Beli Barang', icon: Briefcase, desc: 'Keluar kilang beli alat ganti / urusan' },
+    { id: 'Keluar Rehat / Makan Tengah Hari', label: 'Keluar Rehat / Makan', icon: Coffee, desc: 'Keluar untuk waktu rehat tengah hari' },
+    { id: 'Daftar Keluar Luar Kawasan (Outstation)', label: 'Daftar Keluar Outstation', icon: Car, desc: 'Keluar untuk bertugas luar kawasan' },
+    { id: 'Lain-lain Catatan Keluar', label: 'Lain-lain Catatan Keluar', icon: MessageSquare, desc: 'Nyatakan sebab pada kotak catatan' },
+  ];
+
+  const activePresets = isClockIn ? clockInPresets : clockOutPresets;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[#182234] border border-slate-700/80 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative my-auto">
+      <div className="bg-[#182234] border border-slate-700/80 rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative my-auto max-h-[95vh] overflow-y-auto">
         {/* Hidden Canvas for Live Video Snapping */}
         <canvas ref={canvasRef} className="hidden" />
 
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-3">
           <div>
-            <h3 className="text-base font-bold text-white">
-              {isClockIn ? 'Rakam Kehadiran Masuk' : 'Rakam Kehadiran Keluar'}
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span>{isClockIn ? 'Rakam Kehadiran Masuk' : 'Rakam Kehadiran Keluar'}</span>
+              {isOutstationMode && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold">
+                  Outstation
+                </span>
+              )}
             </h3>
             <p className="text-xs text-slate-400">
-              Langkah {currentStep} dari 3 • {currentStep === 1 ? 'Lokasi GPS Pejabat' : currentStep === 2 ? 'Pengecaman Wajah' : 'Pengesahan Sah'}
+              Langkah {currentStep} dari 3 • {currentStep === 1 ? 'Lokasi & Catatan Kehadiran' : currentStep === 2 ? 'Pengecaman Wajah' : 'Pengesahan Sah'}
             </p>
           </div>
           <button
@@ -318,71 +395,220 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-between px-6 mb-5">
+        <div className="flex items-center justify-between px-6 mb-4">
           <div className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 1 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 1 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
               1
             </div>
-            <span className="text-[10px]">Lokasi</span>
+            <span className="text-[10px]">Lokasi & Catatan</span>
           </div>
           <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 2 ? 'bg-emerald-500' : 'bg-slate-800'}`} />
           <div className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 2 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 2 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
               2
             </div>
-            <span className="text-[10px]">Pengecaman Wajah</span>
+            <span className="text-[10px]">Wajah</span>
           </div>
           <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 3 ? 'bg-emerald-500' : 'bg-slate-800'}`} />
           <div className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 3 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 3 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
               3
             </div>
             <span className="text-[10px]">Selesai</span>
           </div>
         </div>
 
-        {/* STEP 1: LOKASI GPS & MAP (STRICT GEOFENCE) */}
+        {/* STEP 1: MOD KEHADIRAN (KILANG VS OUTSTATION) + CATATAN & REMARK */}
         {currentStep === 1 && (
           <div className="space-y-4">
-            <GeofenceMap
-              office={assignedOffice}
-              userLocation={userLocation}
-              isInsideRadius={isInsideRadius}
-              distanceMeters={distanceToOffice}
-              heightClass="h-60"
-              defaultSatellite={true}
-            />
+            {/* Mode Selector: Premis Kilang vs Kerja Luar Kawasan (Outstation) */}
+            <div className="p-1 rounded-2xl bg-slate-900 border border-slate-700/80 flex gap-1">
+              <button
+                type="button"
+                onClick={() => handleToggleOutstation(false)}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  !isOutstationMode
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Premis Kilang / Pejabat</span>
+              </button>
 
-            {/* Geofence Alert Box */}
-            {isInsideRadius ? (
-              <div className="p-3.5 rounded-2xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-white">
-                    Anda berada dalam zon kehadiran sah
-                  </p>
-                  <p className="text-[11px] mt-0.5 opacity-90">
-                    Jarak ke {assignedOffice?.name}: {distanceToOffice ?? 0}m (Had Zon: {assignedOffice?.radiusMeters}m).
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3.5 rounded-2xl border bg-red-500/15 border-red-500/40 text-red-300 text-xs flex items-start gap-3 shadow-lg">
-                <AlertOctagon className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-white text-xs">
-                    Rakam Kehadiran Masuk Diblok: Luar Radius Pejabat
-                  </p>
-                  <p className="text-[11px] mt-1 text-red-200 leading-snug">
-                    Jarak anda <strong>{distanceToOffice ?? 0}m</strong> melebihi had radius geofens pejabat (<strong>{assignedOffice?.radiusMeters}m</strong>).
-                  </p>
-                  <p className="text-[10px] text-red-300/90 mt-1 font-semibold">
-                    *Tiada rakam masuk di luar radius dibenarkan. Anda wajib berada di premis cawangan pejabat.
-                  </p>
-                </div>
+              <button
+                type="button"
+                onClick={() => handleToggleOutstation(true)}
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  isOutstationMode
+                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/25'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Car className="w-3.5 h-3.5" />
+                <span>Kerja Luar Kawasan (Outstation)</span>
+              </button>
+            </div>
+
+            {/* Error Message Alert */}
+            {errorMessage && (
+              <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <div className="leading-snug">{errorMessage}</div>
               </div>
             )}
 
+            {/* 1. OUTSTATION MODE CONFIG */}
+            {isOutstationMode ? (
+              <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-xs space-y-2.5">
+                <div className="flex items-center gap-2 text-blue-300 font-bold">
+                  <Car className="w-4 h-4 text-blue-400" />
+                  <span>Mod Tugasan Luar Kawasan (Outstation)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Pengecualian radius geofens kilang diaktifkan. Anda dibenarkan {isClockIn ? 'daftar masuk' : 'daftar keluar'} dari lokasi luar kawasan kerja anda.
+                </p>
+
+                {/* Outstation Location Input (Required) */}
+                <div className="pt-1">
+                  <label className="block text-[11px] font-bold text-white mb-1">
+                    Nama Lokasi / Tapak Luar Kawasan: <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={outstationLocation}
+                    onChange={(e) => {
+                      setOutstationLocation(e.target.value);
+                      if (errorMessage) setErrorMessage(null);
+                    }}
+                    placeholder="Contoh: Tapak Projek Kulim / Pembekal Hardware Indah"
+                    className="w-full bg-slate-900 border border-blue-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
+                  />
+                  <p className="text-[10px] text-blue-300/80 mt-1">
+                    *Wajib dinyatakan supaya pihak pentadbir Halagel dapat merekodkan destinasi rasmi anda.
+                  </p>
+                </div>
+
+                <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Navigation className="w-3 h-3 text-blue-400" />
+                    GPS Semasa: {userLocation ? `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Dikesan'}
+                  </span>
+                  <span className="text-emerald-400 font-semibold">✓ Koordinat Ditandai Outstation</span>
+                </div>
+              </div>
+            ) : (
+              /* 2. PREMIS KILANG GEOFENCE MAP & CHECK */
+              <div className="space-y-3">
+                <GeofenceMap
+                  office={assignedOffice}
+                  userLocation={userLocation}
+                  isInsideRadius={isInsideRadius}
+                  distanceMeters={distanceToOffice}
+                  heightClass="h-44"
+                  defaultSatellite={true}
+                />
+
+                {isInsideRadius ? (
+                  <div className="p-3 rounded-2xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-white">
+                        Anda berada dalam zon cawangan sah
+                      </p>
+                      <p className="text-[11px] mt-0.5 opacity-90">
+                        Jarak ke {assignedOffice?.name}: {distanceToOffice ?? 0}m (Had Zon: {assignedOffice?.radiusMeters}m).
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-2xl border bg-red-500/15 border-red-500/40 text-red-300 text-xs flex items-start gap-2.5 shadow-lg">
+                    <AlertOctagon className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-white text-xs">
+                        Rakam Kehadiran Diblok: Luar Radius Kilang
+                      </p>
+                      <p className="text-[11px] mt-1 text-red-200 leading-snug">
+                        Jarak anda <strong>{distanceToOffice ?? 0}m</strong> melebihi had radius geofens cawangan (<strong>{assignedOffice?.radiusMeters}m</strong>).
+                      </p>
+                      <p className="text-[10px] text-amber-300 font-semibold mt-1">
+                        👉 Jika anda berada di luar untuk urusan kerja luar/projek, sila tekan butang <strong>"Kerja Luar Kawasan (Outstation)"</strong> di atas.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. TUJUAN KELUAR/MASUK (PRESETS) */}
+            <div className="space-y-2 pt-1">
+              <label className="block text-xs font-bold text-white">
+                {isClockIn ? 'Tujuan / Kategori Daftar Masuk:' : 'Tujuan / Kategori Daftar Keluar:'}
+              </label>
+
+              <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                {activePresets.map((preset) => {
+                  const Icon = preset.icon;
+                  const isSelected = selectedPreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPreset(preset.id);
+                        if (preset.id.includes('Outstation') && !isOutstationMode) {
+                          setIsOutstationMode(true);
+                        }
+                      }}
+                      className={`p-2 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold'
+                          : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="text-xs">{preset.label}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">{preset.desc}</div>
+                        </div>
+                      </div>
+                      {isSelected && <span className="text-emerald-400 font-bold text-xs">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 4. KOTAK REMARK / CATATAN TAMBAHAN (USER REQUEST) */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Kotak Catatan Tambahan (Remark):</span>
+                </label>
+                <span className="text-[10px] text-slate-400">Pilihan / Opsional</span>
+              </div>
+              <textarea
+                rows={2}
+                value={customRemark}
+                onChange={(e) => setCustomRemark(e.target.value)}
+                placeholder={
+                  isClockIn
+                    ? 'Contoh: Masuk selepas pembelian barang kilang di hardware / Masuk selepas urusan bank'
+                    : 'Contoh: Keluar membeli alat ganti mesin pembungkusan / Keluar rehat makan tengah hari / Balik tamat syif'
+                }
+                className="w-full bg-slate-900 border border-slate-700/90 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+              />
+              <p className="text-[10px] text-slate-400">
+                *Catatan ini akan direkodkan secara rasmi ke dalam log kehadiran dan diselaraskan ke Google Sheets.
+              </p>
+            </div>
+
+            {/* Actions Bar */}
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
@@ -394,48 +620,62 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 <RefreshCw className={`w-4 h-4 ${isSearchingLocation ? 'animate-spin' : ''}`} />
               </button>
 
-              {/* STRICT GEOFENCE ENFORCEMENT: Disabled if outside radius */}
+              {/* STRICT GEOFENCE OR OUTSTATION BUTTON */}
               <button
                 type="button"
-                disabled={!isInsideRadius}
-                onClick={isInsideRadius ? proceedToPhotoStep : undefined}
-                className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition ${
-                  isInsideRadius
+                disabled={!isOutstationMode && !isInsideRadius}
+                onClick={proceedToPhotoStep}
+                className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+                  isOutstationMode
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer shadow-lg shadow-blue-500/25 active:scale-[0.98]'
+                    : isInsideRadius
                     ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-[0.98]'
                     : 'bg-slate-800/80 text-slate-500 border border-slate-700/80 cursor-not-allowed opacity-60'
                 }`}
               >
-                <span>{isInsideRadius ? 'Sahkan Lokasi & Pengecaman Wajah' : 'Diblok: Anda Di Luar Radius'}</span>
+                <span>
+                  {isOutstationMode
+                    ? 'Sahkan Outstation & Pengecaman Wajah'
+                    : isInsideRadius
+                    ? 'Sahkan Lokasi & Pengecaman Wajah'
+                    : 'Diblok: Anda Di Luar Radius Kilang'}
+                </span>
                 <ScanFace className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: PENGE CAMAN WAJAH BIOMETRIK SEBENAR (REAL FACE RECOGNITION) */}
+        {/* STEP 2: PENGE CAMAN WAJAH BIOMETRIK SEBENAR */}
         {currentStep === 2 && (
           <div className="space-y-4">
-            {/* Target Profile Bar */}
+            {/* Target Profile & Selected Context Bar */}
             <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 {enrolledPhoto ? (
                   <img
                     src={enrolledPhoto}
                     alt="Foto Profil"
-                    className="w-7 h-7 rounded-full object-cover border border-emerald-400"
+                    className="w-8 h-8 rounded-full object-cover border border-emerald-400"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">
                     {user?.name.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <div className="text-white font-bold text-[11px]">{user?.name}</div>
-                  <div className="text-[10px] text-slate-400">ID: {user?.employeeId} • Templat Biometrik Disahkan</div>
+                  <div className="text-white font-bold text-[11px]">{user?.name} ({user?.employeeId})</div>
+                  <div className="text-[10px] text-slate-400 line-clamp-1">
+                    {selectedPreset} {customRemark ? `• ${customRemark}` : ''}
+                  </div>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                Wajah Didaftarkan
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                isOutstationMode
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+              }`}>
+                {isOutstationMode ? 'Outstation' : 'Premis Kilang'}
               </span>
             </div>
 
@@ -507,7 +747,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 )}
                 {recognitionStage === 'detecting' && (
                   <span className="text-blue-300 font-semibold animate-pulse">
-                    🔍 Mengesan struktur & titik geometri wajah...
+                    🔍 Mengesan struktur & geometri wajah...
                   </span>
                 )}
                 {recognitionStage === 'matching' && (
@@ -529,24 +769,33 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
             </div>
 
             {/* Recognition Trigger Button */}
-            <button
-              type="button"
-              disabled={isRecognizing}
-              onClick={handleRunFaceRecognition}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-60 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
-            >
-              {isRecognizing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Mengesahkan Pengecaman Wajah...</span>
-                </>
-              ) : (
-                <>
-                  <ScanFace className="w-5 h-5 text-slate-950" />
-                  <span>Imbas Wajah & Sahkan Kehadiran</span>
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+              >
+                Kembali
+              </button>
+              <button
+                type="button"
+                disabled={isRecognizing}
+                onClick={handleRunFaceRecognition}
+                className="flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-60 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+              >
+                {isRecognizing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                    <span>Mengesahkan Pengecaman Wajah...</span>
+                  </>
+                ) : (
+                  <>
+                    <ScanFace className="w-5 h-5 text-slate-950" />
+                    <span>Imbas Wajah & Sahkan Kehadiran</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
@@ -559,21 +808,30 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
             <div>
               <h4 className="text-lg font-bold text-white">
-                {isClockIn ? 'Berjaya Rakam Masuk!' : 'Berjaya Rakam Keluar!'}
+                {isClockIn ? 'Berjaya Rakam Kehadiran Masuk!' : 'Berjaya Rakam Kehadiran Keluar!'}
               </h4>
               <p className="text-xs text-slate-400 mt-1">
                 Pengecaman biometrik wajah disahkan & data disimpan ke pangkalan data Halagel
               </p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 text-xs text-left space-y-1.5">
+            <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 text-xs text-left space-y-2">
               <div className="flex justify-between">
                 <span className="text-slate-400">Pekerja:</span>
                 <span className="text-white font-medium">{user?.name} ({user?.employeeId})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Cawangan:</span>
-                <span className="text-white font-medium">{assignedOffice?.name}</span>
+                <span className="text-slate-400">Mod Kehadiran:</span>
+                <span className={`font-bold ${isOutstationMode ? 'text-blue-400' : 'text-emerald-400'}`}>
+                  {isOutstationMode ? `Luar Kawasan (${outstationLocation || 'Outstation'})` : assignedOffice?.name}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Tujuan / Remark:</span>
+                <span className="text-white font-medium text-right max-w-[200px]">
+                  {selectedPreset}
+                  {customRemark ? ` (${customRemark})` : ''}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Pengecaman Wajah:</span>
@@ -582,7 +840,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Waktu:</span>
+                <span className="text-slate-400">Waktu Rekod (KL):</span>
                 <span className="text-white font-medium">
                   {new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: true })}
                 </span>
