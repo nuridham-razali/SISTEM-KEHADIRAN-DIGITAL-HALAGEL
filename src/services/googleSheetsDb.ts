@@ -1,5 +1,6 @@
 import { AttendanceRecord, User, Office } from '../types';
 import { DEFAULT_APPS_SCRIPT_URL } from '../config/database';
+import { parseKLTimeStringToDate, computeDurationFromKLTimes, formatDateToDMY, formatDateTimeToDMY } from '../utils/workingHours';
 
 const SPREADSHEET_KEY = 'halagel_sheets_id_v2';
 const SPREADSHEET_INFO_KEY = 'halagel_sheets_info_v2';
@@ -71,32 +72,8 @@ function formatEmployeeIdForSheet(empId: string): string {
 }
 
 function normalizeWorkDate(val: any): string {
-  if (!val) return new Date().toISOString().slice(0, 10);
-  const str = String(val).trim();
-  // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return str;
-  }
-  // DD/MM/YYYY
-  const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmyMatch) {
-    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
-  }
-  // ISO Date string from Google Apps Script getValues()
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    try {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Kuala_Lumpur',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(parsed);
-    } catch {
-      return parsed.toISOString().slice(0, 10);
-    }
-  }
-  return str;
+  if (!val) return formatDateToDMY();
+  return formatDateToDMY(String(val));
 }
 
 function formatSheetTime(val: any, workDate: string): string {
@@ -115,10 +92,10 @@ function formatSheetTime(val: any, workDate: string): string {
         second: '2-digit',
         hour12: true,
       }).format(parsed);
-      return `${workDate}, ${timePart}`;
+      return `${formatDateToDMY(workDate)}, ${timePart}`;
     }
   }
-  return str;
+  return formatDateTimeToDMY(str, workDate);
 }
 
 function parseExceptionMetadata(notes: string | null | undefined) {
@@ -290,8 +267,13 @@ export const googleSheetsDb = {
 
         const rawHours = String(row[12] ?? '').replace(/jam/i, '').trim();
         const parsedHours = rawHours && rawHours !== '-' ? parseFloat(rawHours) : NaN;
-        const workedHours = !isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null));
-        const workedMinutes = workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null);
+        const computedDuration = isStillOpen ? null : computeDurationFromKLTimes(clockInTimeKL, clockOutTimeKL, workDate);
+        const workedHours = computedDuration
+          ? computedDuration.workedHours
+          : (!isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null)));
+        const workedMinutes = computedDuration
+          ? computedDuration.workedMinutes
+          : (workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null));
 
         const rawOutstation = String(row[13] ?? '').trim().toUpperCase();
         const isOutstation =
@@ -310,6 +292,9 @@ export const googleSheetsDb = {
         const exceptionNotes = !rawNotes || rawNotes === '-' ? null : rawNotes;
         const officeId = String(row[18] || prev?.officeId || 'OFF-01').trim();
 
+        const parsedInDate = parseKLTimeStringToDate(clockInTimeKL, workDate);
+        const parsedOutDate = isStillOpen ? null : parseKLTimeStringToDate(clockOutTimeKL, workDate);
+
         return {
           sessionId,
           employeeId,
@@ -317,9 +302,11 @@ export const googleSheetsDb = {
           department,
           officeId,
           workDate,
-          clockInTimeUTC: prev?.clockInTimeUTC || new Date().toISOString(),
+          clockInTimeUTC: parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()),
           clockInTimeKL,
-          clockOutTimeUTC: isStillOpen ? undefined : (prev?.clockOutTimeUTC || new Date().toISOString()),
+          clockOutTimeUTC: isStillOpen
+            ? undefined
+            : (parsedOutDate ? parsedOutDate.toISOString() : (prev?.clockOutTimeUTC || new Date().toISOString())),
           clockOutTimeKL,
           clockInLat: prev?.clockInLat ?? 5.6432,
           clockInLng: prev?.clockInLng ?? 100.4912,
@@ -349,8 +336,13 @@ export const googleSheetsDb = {
 
       const rawHours = String(row[8] ?? '').replace(/jam/i, '').trim();
       const parsedHours = rawHours && rawHours !== '-' ? parseFloat(rawHours) : NaN;
-      const workedHours = !isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null));
-      const workedMinutes = workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null);
+      const computedDuration = isStillOpen ? null : computeDurationFromKLTimes(clockInTimeKL, clockOutTimeKL, workDate);
+      const workedHours = computedDuration
+        ? computedDuration.workedHours
+        : (!isNaN(parsedHours) ? parsedHours : (isStillOpen ? null : (prev?.workedHours ?? null)));
+      const workedMinutes = computedDuration
+        ? computedDuration.workedMinutes
+        : (workedHours != null ? Math.round(workedHours * 60) : (prev?.workedMinutes ?? null));
 
       const parsedDist = parseInt(String(row[9] ?? '0'), 10);
       const clockInDistanceMeters = !isNaN(parsedDist) ? parsedDist : (prev?.clockInDistanceMeters ?? 0);
@@ -366,6 +358,9 @@ export const googleSheetsDb = {
         parsedMeta.isOutstation ||
         Boolean(prev?.isOutstation);
 
+      const parsedInDate = parseKLTimeStringToDate(clockInTimeKL, workDate);
+      const parsedOutDate = isStillOpen ? null : parseKLTimeStringToDate(clockOutTimeKL, workDate);
+
       return {
         sessionId,
         employeeId,
@@ -373,9 +368,11 @@ export const googleSheetsDb = {
         department,
         officeId,
         workDate,
-        clockInTimeUTC: prev?.clockInTimeUTC || new Date().toISOString(),
+        clockInTimeUTC: parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()),
         clockInTimeKL,
-        clockOutTimeUTC: isStillOpen ? undefined : (prev?.clockOutTimeUTC || new Date().toISOString()),
+        clockOutTimeUTC: isStillOpen
+          ? undefined
+          : (parsedOutDate ? parsedOutDate.toISOString() : (prev?.clockOutTimeUTC || new Date().toISOString())),
         clockOutTimeKL,
         clockInLat: prev?.clockInLat ?? 5.6432,
         clockInLng: prev?.clockInLng ?? 100.4912,

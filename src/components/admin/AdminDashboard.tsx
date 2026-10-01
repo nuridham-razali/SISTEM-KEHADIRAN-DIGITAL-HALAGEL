@@ -9,6 +9,7 @@ import { ImportEmployeesModal } from './ImportEmployeesModal';
 import { GoogleSheetsDbManager } from './GoogleSheetsDbManager';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
 import { HALAGEL_LOGO } from '../../assets/logo';
+import { formatWorkedDuration, formatDateToDMY, formatDateTimeToDMY } from '../../utils/workingHours';
 import {
   Building2,
   Users,
@@ -412,12 +413,12 @@ export const AdminDashboard: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-300">
-                      <span>Tarikh: <strong>{r.workDate}</strong></span>
-                      <span>Masuk: <strong className="text-emerald-300">{r.clockInTimeKL}</strong></span>
-                      <span>Keluar: <strong className="text-amber-300">{r.clockOutTimeKL || 'Belum Keluar'}</strong></span>
+                      <span>Tarikh: <strong>{formatDateToDMY(r.workDate)}</strong></span>
+                      <span>Masuk: <strong className="text-emerald-300">{formatDateTimeToDMY(r.clockInTimeKL, r.workDate)}</strong></span>
+                      <span>Keluar: <strong className="text-amber-300">{r.clockOutTimeKL ? formatDateTimeToDMY(r.clockOutTimeKL, r.workDate) : 'Belum Keluar'}</strong></span>
                       <span>Geofens: <strong>{r.isOutstation ? 'Outstation' : `${r.clockInDistanceMeters ?? 0}m`}</strong></span>
-                      {r.workedHours && (
-                        <span>Jumlah: <strong className="text-emerald-400">{r.workedHours} jam</strong></span>
+                      {(r.workedHours != null || r.workedMinutes != null || r.clockOutTimeKL) && (
+                        <span>Jumlah: <strong className="text-emerald-400">{formatWorkedDuration(r.workedHours, r.workedMinutes, r.clockInTimeKL, r.clockOutTimeKL, r.workDate)}</strong></span>
                       )}
                     </div>
 

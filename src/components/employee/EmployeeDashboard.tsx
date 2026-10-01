@@ -8,6 +8,7 @@ import { GeofenceMap } from '../common/GeofenceMap';
 import { LocationPermissionPrompt } from '../common/LocationPermissionPrompt';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
 import { HALAGEL_LOGO } from '../../assets/logo';
+import { formatWorkedDuration } from '../../utils/workingHours';
 import {
   Fingerprint,
   Clock,
@@ -537,7 +538,7 @@ export const EmployeeDashboard: React.FC = () => {
                   <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
                     <span>Geofens: <strong className="text-slate-300">{rec.isOutstation ? 'Outstation' : `${rec.clockInDistanceMeters ?? 0}m`}</strong></span>
                     <span>Wajah: <strong className="text-emerald-400">✓ Disahkan</strong></span>
-                    <span>Tempoh: <strong className="text-emerald-300">{rec.workedHours ? `${rec.workedHours} jam` : '-'}</strong></span>
+                    <span>Tempoh: <strong className="text-emerald-300">{formatWorkedDuration(rec.workedHours, rec.workedMinutes, rec.clockInTimeKL, rec.clockOutTimeKL, rec.workDate)}</strong></span>
                   </div>
                 </div>
               ))}

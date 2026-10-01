@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AttendanceRecord } from '../../types';
 import { api } from '../../services/api';
+import { computeDurationFromKLTimes, formatWorkedDuration, formatDateTimeToDMY } from '../../utils/workingHours';
 import { X, ShieldAlert } from 'lucide-react';
 
 interface CorrectionModalProps {
@@ -14,13 +15,43 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
   onClose,
   onSaved,
 }) => {
-  const [clockInTimeKL, setClockInTimeKL] = useState(record.clockInTimeKL || '');
-  const [clockOutTimeKL, setClockOutTimeKL] = useState(record.clockOutTimeKL || '');
+  const initialComputed = computeDurationFromKLTimes(
+    record.clockInTimeKL,
+    record.clockOutTimeKL,
+    record.workDate
+  );
+  const [clockInTimeKL, setClockInTimeKL] = useState(
+    formatDateTimeToDMY(record.clockInTimeKL, record.workDate)
+  );
+  const [clockOutTimeKL, setClockOutTimeKL] = useState(
+    formatDateTimeToDMY(record.clockOutTimeKL, record.workDate)
+  );
   const [attendanceStatus, setAttendanceStatus] = useState(record.attendanceStatus || 'COMPLETED');
-  const [workedMinutes, setWorkedMinutes] = useState(record.workedMinutes?.toString() || '480');
+  const [workedMinutes, setWorkedMinutes] = useState(
+    initialComputed
+      ? String(initialComputed.workedMinutes)
+      : (record.workedMinutes?.toString() || '480')
+  );
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const recalculateMinutesFromTimes = (newIn: string, newOut: string) => {
+    const computed = computeDurationFromKLTimes(newIn, newOut, record.workDate);
+    if (computed) {
+      setWorkedMinutes(String(computed.workedMinutes));
+    }
+  };
+
+  const handleClockInChange = (val: string) => {
+    setClockInTimeKL(val);
+    recalculateMinutesFromTimes(val, clockOutTimeKL);
+  };
+
+  const handleClockOutChange = (val: string) => {
+    setClockOutTimeKL(val);
+    recalculateMinutesFromTimes(clockInTimeKL, val);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +109,7 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
               <input
                 type="text"
                 value={clockInTimeKL}
-                onChange={(e) => setClockInTimeKL(e.target.value)}
+                onChange={(e) => handleClockInChange(e.target.value)}
                 className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3 py-2 text-white"
               />
             </div>
@@ -87,7 +118,7 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
               <input
                 type="text"
                 value={clockOutTimeKL}
-                onChange={(e) => setClockOutTimeKL(e.target.value)}
+                onChange={(e) => handleClockOutChange(e.target.value)}
                 className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3 py-2 text-white"
               />
             </div>
@@ -115,6 +146,9 @@ export const CorrectionModal: React.FC<CorrectionModalProps> = ({
                 onChange={(e) => setWorkedMinutes(e.target.value)}
                 className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3 py-2 text-white"
               />
+              <span className="block text-[10px] text-emerald-400 mt-1">
+                ≈ {formatWorkedDuration(undefined, parseInt(workedMinutes, 10) || 0)}
+              </span>
             </div>
           </div>
 

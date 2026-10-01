@@ -1,6 +1,15 @@
 import { User, Office, AttendanceRecord, DashboardStatus, AdminMetrics, VerificationChallenge } from '../types';
 import { calculateHaversineDistance } from '../utils/geo';
-import { evaluateClockIn, evaluateAttendanceSession } from '../utils/workingHours';
+import {
+  evaluateClockIn,
+  evaluateAttendanceSession,
+  parseKLTimeStringToDate,
+  computeDurationFromKLTimes,
+  getMalaysiaDateDMY,
+  formatDateToDMY,
+  formatDateTimeToDMY,
+  isSameWorkDate,
+} from '../utils/workingHours';
 import { googleSheetsDb } from './googleSheetsDb';
 
 const STORAGE_KEYS = {
@@ -199,7 +208,47 @@ class HalagelApiService {
   }
 
   private getAttendanceList(): AttendanceRecord[] {
-    return loadItem(STORAGE_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE);
+    const list = loadItem(STORAGE_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE);
+    let repaired = false;
+    list.forEach((rec) => {
+      if (rec.workDate) {
+        const dmyDate = formatDateToDMY(rec.workDate);
+        if (rec.workDate !== dmyDate) {
+          rec.workDate = dmyDate;
+          repaired = true;
+        }
+      }
+      if (rec.clockInTimeKL) {
+        const dmyIn = formatDateTimeToDMY(rec.clockInTimeKL, rec.workDate);
+        if (rec.clockInTimeKL !== dmyIn) {
+          rec.clockInTimeKL = dmyIn;
+          repaired = true;
+        }
+      }
+      if (rec.clockOutTimeKL) {
+        const dmyOut = formatDateTimeToDMY(rec.clockOutTimeKL, rec.workDate);
+        if (rec.clockOutTimeKL !== dmyOut) {
+          rec.clockOutTimeKL = dmyOut;
+          repaired = true;
+        }
+      }
+      if (rec.clockInTimeKL && rec.clockOutTimeKL) {
+        const computed = computeDurationFromKLTimes(rec.clockInTimeKL, rec.clockOutTimeKL, rec.workDate);
+        if (computed) {
+          if (rec.workedMinutes !== computed.workedMinutes || rec.workedHours !== computed.workedHours) {
+            rec.workedMinutes = computed.workedMinutes;
+            rec.workedHours = computed.workedHours;
+            rec.clockInTimeUTC = computed.inDate.toISOString();
+            rec.clockOutTimeUTC = computed.outDate.toISOString();
+            repaired = true;
+          }
+        }
+      }
+    });
+    if (repaired) {
+      saveItem(STORAGE_KEYS.ATTENDANCE, list);
+    }
+    return list;
   }
 
   private saveAttendanceList(list: AttendanceRecord[]) {
@@ -418,15 +467,10 @@ class HalagelApiService {
 
     const allRecords = this.getAttendanceList();
     const now = new Date();
-    const todayStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now);
+    const todayStr = getMalaysiaDateDMY(now);
 
     const userRecords = allRecords.filter((r) => this.isSameEmployeeId(r.employeeId, user.employeeId));
-    const todayRecords = userRecords.filter((r) => r.workDate === todayStr);
+    const todayRecords = userRecords.filter((r) => isSameWorkDate(r.workDate, todayStr));
 
     // Open session is strictly any session today where clock-out has not occurred yet
     const openSession = todayRecords.find((r) => !r.clockOutTimeKL && !r.clockOutTimeUTC) || null;
@@ -532,12 +576,7 @@ class HalagelApiService {
     }
 
     const now = new Date();
-    const dateKL = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now);
+    const dateKL = getMalaysiaDateDMY(now);
     const evalIn = evaluateClockIn(now);
 
     const entryLabel = payload.entryType || (isOut ? 'Kerja Luar Kawasan (Outstation)' : 'Datang Bekerja');
@@ -623,16 +662,14 @@ class HalagelApiService {
     );
 
     const now = new Date();
-    const dateKL = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(now);
+    const dateKL = getMalaysiaDateDMY(now);
     const exitLabel = payload.exitType || (isOut ? 'Keluar Luar Kawasan (Outstation)' : 'Balik / Tamat Kerja');
 
     if (session) {
-      const evalOut = evaluateAttendanceSession(new Date(session.clockInTimeUTC), now);
+      const accurateInDate =
+        parseKLTimeStringToDate(session.clockInTimeKL, session.workDate) ||
+        new Date(session.clockInTimeUTC);
+      const evalOut = evaluateAttendanceSession(accurateInDate, now);
 
       session.clockOutTimeUTC = now.toISOString();
       session.clockOutTimeKL = `${dateKL}, ${evalOut.clockOutTimeFormatted}`;
@@ -650,7 +687,7 @@ class HalagelApiService {
       }
 
       const todayOtherRecords = records.filter(
-        (r) => this.isSameEmployeeId(r.employeeId, user.employeeId) && r.workDate === dateKL && r.sessionId !== session.sessionId && (r.workedHours || 0) > 0
+        (r) => this.isSameEmployeeId(r.employeeId, user.employeeId) && isSameWorkDate(r.workDate, dateKL) && r.sessionId !== session.sessionId && (r.workedHours || 0) > 0
       );
       const totalTodayHours = todayOtherRecords.reduce((acc, curr) => acc + (curr.workedHours || 0), session.workedHours || 0);
 
@@ -955,10 +992,25 @@ class HalagelApiService {
     const rec = records.find((r) => r.sessionId === sessionId);
     if (!rec) throw new Error('Rekod tidak dijumpai');
 
-    if (payload.clockInTimeKL) rec.clockInTimeKL = payload.clockInTimeKL;
-    if (payload.clockOutTimeKL) rec.clockOutTimeKL = payload.clockOutTimeKL;
+    if (payload.clockInTimeKL) {
+      rec.clockInTimeKL = formatDateTimeToDMY(payload.clockInTimeKL, rec.workDate);
+      const parsedIn = parseKLTimeStringToDate(rec.clockInTimeKL, rec.workDate);
+      if (parsedIn) rec.clockInTimeUTC = parsedIn.toISOString();
+    }
+    if (payload.clockOutTimeKL) {
+      rec.clockOutTimeKL = formatDateTimeToDMY(payload.clockOutTimeKL, rec.workDate);
+      const parsedOut = parseKLTimeStringToDate(rec.clockOutTimeKL, rec.workDate);
+      if (parsedOut) rec.clockOutTimeUTC = parsedOut.toISOString();
+    }
     if (payload.attendanceStatus) rec.attendanceStatus = payload.attendanceStatus;
-    if (payload.workedMinutes != null) {
+
+    const computed = computeDurationFromKLTimes(rec.clockInTimeKL, rec.clockOutTimeKL, rec.workDate);
+    if (computed) {
+      rec.workedMinutes = computed.workedMinutes;
+      rec.workedHours = computed.workedHours;
+      rec.clockInTimeUTC = computed.inDate.toISOString();
+      rec.clockOutTimeUTC = computed.outDate.toISOString();
+    } else if (payload.workedMinutes != null) {
       rec.workedMinutes = payload.workedMinutes;
       rec.workedHours = parseFloat((payload.workedMinutes / 60).toFixed(2));
     }
@@ -973,13 +1025,8 @@ class HalagelApiService {
     const emps = this.getEmployeesList();
     const offices = this.getOfficesList();
     const records = this.getAttendanceList();
-    const nowStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-    const todayRecs = records.filter((r) => r.workDate === nowStr);
+    const nowStr = getMalaysiaDateDMY(new Date());
+    const todayRecs = records.filter((r) => isSameWorkDate(r.workDate, nowStr));
 
     return {
       totalEmployees: emps.length,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { AttendanceRecord } from '../../types';
+import { formatWorkedDuration, formatDateToDMY } from '../../utils/workingHours';
 import { ArrowLeft, Calendar, Clock, Car, Briefcase, Coffee, Home, CheckCircle2 } from 'lucide-react';
 
 interface AttendanceHistoryProps {
@@ -103,7 +104,7 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  {r.workDate}
+                  {formatDateToDMY(r.workDate)}
                 </span>
 
                 <div className="flex items-center gap-1.5">
@@ -207,7 +208,7 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
                 <span>Wajah: <strong className="text-emerald-400">✓ {r.faceVerified}</strong></span>
                 <span>Zon: <strong className="text-white">{r.isOutstation ? 'Outstation' : `${r.clockInDistanceMeters ?? 0}m`}</strong></span>
-                <span>Tempoh: <strong className="text-white">{r.workedHours ? `${r.workedHours} jam` : '-'}</strong></span>
+                <span>Tempoh: <strong className="text-white">{formatWorkedDuration(r.workedHours, r.workedMinutes, r.clockInTimeKL, r.clockOutTimeKL, r.workDate)}</strong></span>
               </div>
             </div>
           ))}

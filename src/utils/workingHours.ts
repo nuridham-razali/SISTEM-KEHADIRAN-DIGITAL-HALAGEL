@@ -334,3 +334,225 @@ export function evaluateAttendanceSession(
     notes,
   };
 }
+
+/**
+ * Converts a date string ("01/10/2026" or "2026-10-01") into YYYY-MM-DD for ISO Date construction.
+ */
+export function toISODatePart(dateStr?: string | null): string {
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const s = dateStr.trim();
+  const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+  }
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  return '';
+}
+
+/**
+ * Formats a Date object as DD/MM/YYYY in Asia/Kuala_Lumpur timezone.
+ */
+export function getMalaysiaDateDMY(date: Date = new Date()): string {
+  const parts = getMalaysiaTimeParts(date);
+  return `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}/${parts.year}`;
+}
+
+/**
+ * Normalizes any date string ("2026-10-01", "1/10/2026", "01/10/2026", or ISO) into DD/MM/YYYY.
+ */
+export function formatDateToDMY(val?: string | null): string {
+  if (!val) return getMalaysiaDateDMY();
+  const str = String(val).trim();
+  if (!str) return getMalaysiaDateDMY();
+
+  const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[1].padStart(2, '0')}/${dmy[2].padStart(2, '0')}/${dmy[3]}`;
+  }
+
+  const ymd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (ymd) {
+    return `${ymd[3].padStart(2, '0')}/${ymd[2].padStart(2, '0')}/${ymd[1]}`;
+  }
+
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return getMalaysiaDateDMY(parsed);
+  }
+  return str;
+}
+
+/**
+ * Compares two workDate strings regardless of whether one is YYYY-MM-DD and the other is DD/MM/YYYY.
+ */
+export function isSameWorkDate(dateA?: string | null, dateB?: string | null): boolean {
+  if (!dateA || !dateB) return false;
+  return formatDateToDMY(dateA) === formatDateToDMY(dateB);
+}
+
+/**
+ * Formats any date-time string such as "2026-10-01, 8:30 AM" into "DD/MM/YYYY, 8:30 AM".
+ */
+export function formatDateTimeToDMY(
+  dateTimeStr?: string | null,
+  fallbackWorkDate?: string | null
+): string {
+  if (!dateTimeStr || typeof dateTimeStr !== 'string') return '';
+  const trimmed = dateTimeStr.trim();
+  if (!trimmed || trimmed === '-' || trimmed.toLowerCase() === 'belum keluar') return '';
+
+  if (trimmed.includes(',')) {
+    const parts = trimmed.split(',');
+    const datePrefix = parts[0].trim();
+    const timeSuffix = parts.slice(1).join(',').trim();
+    return `${formatDateToDMY(datePrefix)}, ${timeSuffix}`;
+  }
+
+  const spaceMatch = trimmed.match(/^(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\s+(.+)$/);
+  if (spaceMatch) {
+    return `${formatDateToDMY(spaceMatch[1])}, ${spaceMatch[2].trim()}`;
+  }
+
+  if (fallbackWorkDate) {
+    return `${formatDateToDMY(fallbackWorkDate)}, ${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+/**
+ * Parses a Malaysia formatted date/time string such as "01/10/2026, 11:59 am",
+ * "2026-10-01, 11:59 am", or "08:30 AM" into a valid JavaScript Date object in Asia/Kuala_Lumpur (+08:00).
+ */
+export function parseKLTimeStringToDate(
+  klTimeStr?: string | null,
+  fallbackWorkDate?: string | null
+): Date | null {
+  if (!klTimeStr || typeof klTimeStr !== 'string') return null;
+  const trimmed = klTimeStr.trim();
+  if (!trimmed || trimmed === '-' || trimmed.toLowerCase() === 'belum keluar') return null;
+
+  let isoDatePart = toISODatePart(fallbackWorkDate);
+  let timePart = trimmed;
+
+  if (trimmed.includes(',')) {
+    const parts = trimmed.split(',');
+    const possibleIsoDate = toISODatePart(parts[0].trim());
+    if (possibleIsoDate) {
+      isoDatePart = possibleIsoDate;
+    }
+    timePart = parts.slice(1).join(',').trim();
+  } else {
+    const datePrefixMatch = trimmed.match(/^(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\s+(.+)$/);
+    if (datePrefixMatch) {
+      const possibleIsoDate = toISODatePart(datePrefixMatch[1]);
+      if (possibleIsoDate) {
+        isoDatePart = possibleIsoDate;
+      }
+      timePart = datePrefixMatch[2].trim();
+    }
+  }
+
+  if (!isoDatePart) {
+    isoDatePart = toISODatePart(getMalaysiaDateDMY());
+  }
+
+  const timeMatch = timePart.match(/^(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$/i);
+  if (!timeMatch) return null;
+
+  let hours = parseInt(timeMatch[1], 10);
+  const minutes = parseInt(timeMatch[2], 10);
+  const seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
+  const rawMeridiem = timeMatch[4]?.toLowerCase().replace(/\./g, '');
+
+  if (rawMeridiem === 'pm' && hours < 12) hours += 12;
+  if (rawMeridiem === 'am' && hours === 12) hours = 0;
+
+  const isoStr = `${isoDatePart}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}+08:00`;
+  const parsed = new Date(isoStr);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Computes workedMinutes and workedHours directly from clockInTimeKL and clockOutTimeKL
+ * whenever both are valid, preventing stale durations (like 0.02 jam) after edits.
+ */
+export function computeDurationFromKLTimes(
+  clockInTimeKL?: string | null,
+  clockOutTimeKL?: string | null,
+  workDate?: string | null
+): {
+  inDate: Date;
+  outDate: Date;
+  workedMinutes: number;
+  workedHours: number;
+  evaluation: WorkingHoursEvaluation;
+} | null {
+  const inDate = parseKLTimeStringToDate(clockInTimeKL, workDate);
+  const outDate = parseKLTimeStringToDate(clockOutTimeKL, workDate);
+  if (!inDate || !outDate) return null;
+
+  // If outDate appears earlier than inDate on the same date (e.g. overnight shift), add 1 day
+  let adjustedOutDate = outDate;
+  if (adjustedOutDate.getTime() < inDate.getTime()) {
+    adjustedOutDate = new Date(adjustedOutDate.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  const evaluation = evaluateAttendanceSession(inDate, adjustedOutDate);
+  return {
+    inDate,
+    outDate: adjustedOutDate,
+    workedMinutes: evaluation.workedMinutes,
+    workedHours: evaluation.workedHours,
+    evaluation,
+  };
+}
+
+/**
+ * Formats worked hours / minutes into a human-friendly BM label showing both
+ * exact hours/minutes and decimal hours (e.g. "9 jam 1 minit (9.02 jam)" or "8 jam").
+ */
+export function formatWorkedDuration(
+  workedHours?: number | null,
+  workedMinutes?: number | null,
+  clockInTimeKL?: string | null,
+  clockOutTimeKL?: string | null,
+  workDate?: string | null
+): string {
+  // Always prioritize computing from actual Masuk & Keluar times if available
+  const computed = computeDurationFromKLTimes(clockInTimeKL, clockOutTimeKL, workDate);
+  const effectiveMinutes = computed ? computed.workedMinutes : workedMinutes;
+  const effectiveHours = computed ? computed.workedHours : workedHours;
+
+  const hasMinutes = effectiveMinutes != null && !isNaN(Number(effectiveMinutes)) && Number(effectiveMinutes) >= 0;
+  const hasHours = effectiveHours != null && !isNaN(Number(effectiveHours)) && Number(effectiveHours) >= 0;
+
+  if (!hasMinutes && !hasHours) return '-';
+
+  const totalMinutes = hasMinutes
+    ? Math.round(Number(effectiveMinutes))
+    : Math.round(Number(effectiveHours) * 60);
+
+  const decHours = hasHours
+    ? Number(Number(effectiveHours).toFixed(2))
+    : Number((totalMinutes / 60).toFixed(2));
+
+  if (totalMinutes <= 0 && decHours <= 0) {
+    return '0 minit (0 jam)';
+  }
+
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+
+  if (hrs === 0) {
+    return `${mins} minit (${decHours} jam)`;
+  }
+  if (mins === 0) {
+    return `${hrs} jam`;
+  }
+  return `${hrs} jam ${mins} minit (${decHours} jam)`;
+}
+
