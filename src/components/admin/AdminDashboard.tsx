@@ -161,13 +161,11 @@ export const AdminDashboard: React.FC = () => {
       {/* Admin Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-5 border-b border-slate-800 gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="px-3 py-1.5 rounded-2xl bg-white border border-emerald-500/30 shadow-md flex items-center justify-center shrink-0">
-            <img
-              src={HALAGEL_LOGO}
-              alt="Halagel Logo"
-              className="h-9 w-auto object-contain"
-            />
-          </div>
+          <img
+            src={HALAGEL_LOGO}
+            alt="Halagel Logo"
+            className="h-12 w-auto object-contain shrink-0"
+          />
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/30">

@@ -29,6 +29,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
+
+    const unsubscribe = api.subscribe(() => {
+      try {
+        const latest = api.getCurrentUser();
+        setUser(latest ? { ...latest } : null);
+      } catch (err) {
+        console.error(err);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const login = async (identifier: string, pass: string) => {

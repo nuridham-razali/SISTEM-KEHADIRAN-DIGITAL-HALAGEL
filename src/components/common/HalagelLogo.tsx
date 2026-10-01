@@ -24,7 +24,7 @@ export const HalagelLogo: React.FC<HalagelLogoProps> = ({
       <img
         src={HALAGEL_LOGO}
         alt="Halagel Logo"
-        className={`${sizeClasses[size]} w-auto object-contain drop-shadow-md transition-transform duration-300 hover:scale-[1.02]`}
+        className={`${sizeClasses[size]} w-auto object-contain border-0 outline-none shadow-none bg-transparent`}
       />
       {showTagline && (
         <span className="text-[11px] font-bold tracking-widest text-[#588517] uppercase mt-1">

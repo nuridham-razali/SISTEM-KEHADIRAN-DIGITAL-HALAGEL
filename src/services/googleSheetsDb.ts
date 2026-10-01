@@ -4,6 +4,7 @@ import { DEFAULT_APPS_SCRIPT_URL } from '../config/database';
 const SPREADSHEET_KEY = 'halagel_sheets_id_v2';
 const SPREADSHEET_INFO_KEY = 'halagel_sheets_info_v2';
 const WEBHOOK_KEY = 'halagel_sheets_webhook_url_v2';
+const SYS_SYNC_SESSION_ID = 'SYS-DB-SYNC';
 
 export interface SpreadsheetInfo {
   spreadsheetId: string;
@@ -17,6 +18,7 @@ export interface PullSyncResult {
   employees?: (User & { password?: string })[];
   offices?: Office[];
   spreadsheetInfo?: SpreadsheetInfo;
+  hasCloudMeta?: boolean;
 }
 
 function extractSpreadsheetId(input: string): string {
@@ -258,6 +260,7 @@ export const googleSheetsDb = {
       const col1 = String(row[1] ?? '').trim();
       if (!col0 && !col1) return false;
       if (col0.toLowerCase() === 'session id' || col1.toLowerCase() === 'id staf') return false;
+      if (col0 === SYS_SYNC_SESSION_ID || col1.toUpperCase() === 'SYSTEM') return false;
       return true;
     });
 
@@ -534,6 +537,108 @@ export const googleSheetsDb = {
   },
 
   /**
+   * Extracts embedded cross-device sync state (Cawangan & Kakitangan) stored in the
+   * SYS-DB-SYNC row of "Kehadiran" so even V1 Apps Script endpoints sync 100% across devices.
+   */
+  extractCloudMetadata(
+    rows: any[][],
+    existingEmployees: (User & { password?: string })[] = []
+  ): {
+    found: boolean;
+    employees?: (User & { password?: string })[];
+    offices?: Office[];
+    deletedSessionIds?: string[];
+    ts?: number;
+  } {
+    if (!Array.isArray(rows)) return { found: false };
+
+    // Scan ALL matching SYS-DB-SYNC rows and pick the one with the latest `ts` timestamp
+    let bestParsed: any = null;
+    let bestTs = -1;
+
+    for (const r of rows) {
+      if (!Array.isArray(r)) continue;
+      const col0 = String(r[0] ?? '').trim();
+      const col1 = String(r[1] ?? '').trim().toUpperCase();
+      const isSyncRow = col0 === SYS_SYNC_SESSION_ID || col1 === 'SYSTEM';
+
+      for (const c of r) {
+        const s = String(c ?? '').trim();
+        if (s.startsWith('{"v":2,') && s.endsWith('}')) {
+          try {
+            const candidate = JSON.parse(s);
+            const candidateTs = typeof candidate.ts === 'number' ? candidate.ts : 0;
+            if (isSyncRow || candidate.v === 2) {
+              if (candidateTs >= bestTs) {
+                bestTs = candidateTs;
+                bestParsed = candidate;
+              }
+            }
+          } catch {
+            // ignore malformed JSON cell
+          }
+        }
+      }
+    }
+
+    if (!bestParsed) return { found: false };
+
+    try {
+      const parsed = bestParsed;
+      let employees: (User & { password?: string })[] | undefined = undefined;
+      let offices: Office[] | undefined = undefined;
+
+      if (Array.isArray(parsed.employees) && parsed.employees.length > 0) {
+        employees = parsed.employees.map((e: any) => {
+          const cleanId = normalizeSheetEmployeeId(e.employeeId, existingEmployees);
+          const localMatch = existingEmployees.find(
+            (loc) => loc.employeeId.toUpperCase() === cleanId
+          );
+          return {
+            employeeId: cleanId,
+            name: String(e.name || cleanId).trim(),
+            email: String(e.email || `${cleanId.toLowerCase()}@halagel.com`).trim(),
+            department: String(e.department || 'Pengeluaran & Operasi').trim(),
+            assignedOfficeId: String(e.assignedOfficeId || 'OFF-01').trim(),
+            role: e.role === 'admin' ? 'admin' : 'employee',
+            active: e.active ?? true,
+            faceEnrolled: Boolean(e.faceEnrolled ?? localMatch?.faceEnrolled),
+            faceEnrolledAt: e.faceEnrolledAt || localMatch?.faceEnrolledAt || null,
+            facePhotoUrl: localMatch?.facePhotoUrl || null,
+            faceBiometricHash: e.faceBiometricHash || localMatch?.faceBiometricHash || null,
+            password:
+              e.password ||
+              localMatch?.password ||
+              (e.role === 'admin' ? 'admin123' : 'Password123!'),
+          };
+        });
+      }
+
+      if (Array.isArray(parsed.offices) && parsed.offices.length > 0) {
+        offices = parsed.offices.map((o: any, idx: number) => ({
+          officeId: String(o.officeId || `OFF-0${idx + 1}`).trim(),
+          name: String(o.name || 'Cawangan Halagel').trim(),
+          address: String(o.address || '').trim(),
+          latitude: typeof o.latitude === 'number' ? o.latitude : parseFloat(String(o.latitude)) || 5.6432,
+          longitude: typeof o.longitude === 'number' ? o.longitude : parseFloat(String(o.longitude)) || 100.4912,
+          radiusMeters: typeof o.radiusMeters === 'number' ? o.radiusMeters : parseInt(String(o.radiusMeters), 10) || 120,
+          maxAccuracyMeters: o.maxAccuracyMeters ?? 50,
+          maxAgeSeconds: o.maxAgeSeconds ?? 60,
+          active: o.active ?? true,
+        }));
+      }
+
+      const deletedSessionIds = Array.isArray(parsed.deletedSessionIds)
+        ? parsed.deletedSessionIds.map((id: any) => String(id))
+        : undefined;
+
+      return { found: true, employees, offices, deletedSessionIds, ts: bestTs };
+    } catch {
+      return { found: false };
+    }
+  },
+
+  /**
    * Pulls the latest data from Google Sheets (via Google Apps Script Web App doGet and/or GViz).
    * Ensures any rows deleted in Google Sheets are also deleted in the app!
    */
@@ -549,6 +654,8 @@ export const googleSheetsDb = {
     let employeesResult: (User & { password?: string })[] | undefined = undefined;
     let officesResult: Office[] | undefined = undefined;
     let spreadsheetInfo: SpreadsheetInfo | undefined = undefined;
+    let hasCloudMeta = false;
+    let deletedSessionIds: Set<string> = new Set();
 
     // 1. Pull from Google Apps Script Web App URL (doGet)
     if (webhookUrl) {
@@ -568,19 +675,52 @@ export const googleSheetsDb = {
               ? payload.data
               : [];
 
-            recordsResult = this.parseAttendanceRows(rawAtt, existingRecords, existingEmployees);
+            // Extract embedded SYS-DB-SYNC metadata if present in Kehadiran rows
+            const cloudMeta = this.extractCloudMetadata(rawAtt, existingEmployees);
+            if (cloudMeta.found) {
+              hasCloudMeta = true;
+              if (cloudMeta.employees && cloudMeta.employees.length > 0) {
+                employeesResult = cloudMeta.employees;
+              }
+              if (cloudMeta.offices && cloudMeta.offices.length > 0) {
+                officesResult = cloudMeta.offices;
+              }
+              if (cloudMeta.deletedSessionIds) {
+                cloudMeta.deletedSessionIds.forEach((id) => deletedSessionIds.add(id));
+              }
+            }
 
+            const effectiveEmps = employeesResult || existingEmployees;
+            recordsResult = this.parseAttendanceRows(rawAtt, existingRecords, effectiveEmps);
+
+            // Only use payload.employees / payload.offices from Kakitangan/Cawangan tabs if:
+            // 1) SYS-DB-SYNC wasn't found, OR
+            // 2) The Kakitangan/Cawangan tab in Google Sheets was directly edited by a user in Google Sheets
             if (Array.isArray(payload.employees) && payload.employees.length > 0) {
-              const parsedEmps = this.parseEmployeeRows(payload.employees, existingEmployees);
+              const rawEmpSnap = JSON.stringify(payload.employees);
+              const prevEmpSnap = typeof window !== 'undefined' ? localStorage.getItem('halagel_raw_sheet_emp_v2') : null;
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('halagel_raw_sheet_emp_v2', rawEmpSnap);
+              }
+              const parsedEmps = this.parseEmployeeRows(payload.employees, effectiveEmps);
               if (parsedEmps.length > 0) {
-                employeesResult = parsedEmps;
+                if (!hasCloudMeta || (prevEmpSnap !== null && prevEmpSnap !== rawEmpSnap)) {
+                  employeesResult = parsedEmps;
+                }
               }
             }
 
             if (Array.isArray(payload.offices) && payload.offices.length > 0) {
-              const parsedOffs = this.parseOfficeRows(payload.offices, existingOffices);
+              const rawOffSnap = JSON.stringify(payload.offices);
+              const prevOffSnap = typeof window !== 'undefined' ? localStorage.getItem('halagel_raw_sheet_off_v2') : null;
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('halagel_raw_sheet_off_v2', rawOffSnap);
+              }
+              const parsedOffs = this.parseOfficeRows(payload.offices, officesResult || existingOffices);
               if (parsedOffs.length > 0) {
-                officesResult = parsedOffs;
+                if (!hasCloudMeta || (prevOffSnap !== null && prevOffSnap !== rawOffSnap)) {
+                  officesResult = parsedOffs;
+                }
               }
             }
 
@@ -613,7 +753,20 @@ export const googleSheetsDb = {
         ]);
 
         if (recordsResult === null && gvizAtt !== null) {
-          recordsResult = this.parseAttendanceRows(gvizAtt, existingRecords, existingEmployees);
+          const cloudMeta = this.extractCloudMetadata(gvizAtt, existingEmployees);
+          if (cloudMeta.found) {
+            hasCloudMeta = true;
+            if (cloudMeta.employees) employeesResult = cloudMeta.employees;
+            if (cloudMeta.offices) officesResult = cloudMeta.offices;
+            if (cloudMeta.deletedSessionIds) {
+              cloudMeta.deletedSessionIds.forEach((id) => deletedSessionIds.add(id));
+            }
+          }
+          recordsResult = this.parseAttendanceRows(
+            gvizAtt,
+            existingRecords,
+            employeesResult || existingEmployees
+          );
         }
         if (!employeesResult && gvizEmp !== null && gvizEmp.length > 0) {
           const parsedEmps = this.parseEmployeeRows(gvizEmp, existingEmployees);
@@ -633,12 +786,53 @@ export const googleSheetsDb = {
     }
 
     if (recordsResult !== null) {
+      // Filter out any sessions deleted by admin
+      if (deletedSessionIds.size > 0) {
+        recordsResult = recordsResult.filter((r) => !deletedSessionIds.has(r.sessionId));
+      }
+
+      // Ensure any staff member who has an active attendance record in Google Sheets
+      // is also registered in the employees list across all devices if SYS-DB-SYNC wasn't created yet
+      if (!hasCloudMeta && recordsResult.length > 0) {
+        const baseEmps = [...(employeesResult || existingEmployees)];
+        let addedFromAtt = false;
+        recordsResult.forEach((r) => {
+          if (!r.employeeId || r.employeeId === 'SYSTEM') return;
+          const exists = baseEmps.some(
+            (e) =>
+              e.employeeId.toUpperCase() === r.employeeId.toUpperCase() ||
+              (/^\d+$/.test(e.employeeId) &&
+                /^\d+$/.test(r.employeeId) &&
+                e.employeeId.replace(/^0+/, '') === r.employeeId.replace(/^0+/, ''))
+          );
+          if (!exists) {
+            baseEmps.push({
+              employeeId: r.employeeId,
+              name: r.employeeName || r.employeeId,
+              email: `${r.employeeId.toLowerCase()}@halagel.com`,
+              department: r.department || 'Pengeluaran & Operasi',
+              assignedOfficeId: r.officeId || 'OFF-01',
+              role: 'employee',
+              active: true,
+              faceEnrolled: r.faceVerified === 'YES',
+              faceEnrolledAt: r.clockInTimeUTC || new Date().toISOString(),
+              password: 'Password123!',
+            });
+            addedFromAtt = true;
+          }
+        });
+        if (addedFromAtt) {
+          employeesResult = baseEmps;
+        }
+      }
+
       return {
         synced: true,
         records: recordsResult,
         employees: employeesResult,
         offices: officesResult,
         spreadsheetInfo,
+        hasCloudMeta,
       };
     }
 
@@ -682,20 +876,81 @@ export const googleSheetsDb = {
   async syncViaWebhook(
     webhookUrl: string,
     records: AttendanceRecord[],
-    employees: User[],
-    offices: Office[]
+    employees: (User & { password?: string })[],
+    offices: Office[],
+    deletedSessionIds: string[] = []
   ) {
-    const safeRecords = records.map((r) => ({
-      ...r,
-      employeeId: formatEmployeeIdForSheet(r.employeeId),
+    const safeRecords = records
+      .filter((r) => r.sessionId !== SYS_SYNC_SESSION_ID)
+      .map((r) => ({
+        ...r,
+        employeeId: formatEmployeeIdForSheet(r.employeeId),
+      }));
+
+    // Strip large base64 photos so Google Sheets cell stays well below the 50,000-character limit
+    const compactEmployees = employees.map((e) => ({
+      employeeId: String(e.employeeId ?? '').replace(/^'+/, '').trim().toUpperCase(),
+      name: e.name,
+      email: e.email,
+      department: e.department,
+      assignedOfficeId: e.assignedOfficeId,
+      role: e.role,
+      active: e.active ?? true,
+      faceEnrolled: Boolean(e.faceEnrolled),
+      faceEnrolledAt: e.faceEnrolledAt || null,
+      faceBiometricHash: e.faceBiometricHash || null,
+      password: e.password || (e.role === 'admin' ? 'admin123' : 'Password123!'),
     }));
-    const safeEmployees = employees.map((e) => ({
+
+    const safeEmployees = compactEmployees.map((e) => ({
       ...e,
       employeeId: formatEmployeeIdForSheet(e.employeeId),
     }));
+
+    const metaJson = JSON.stringify({
+      v: 2,
+      employees: compactEmployees,
+      offices,
+      deletedSessionIds: deletedSessionIds.slice(-100),
+      ts: Date.now(),
+    });
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const sysSyncRecord: AttendanceRecord = {
+      sessionId: SYS_SYNC_SESSION_ID,
+      employeeId: 'SYSTEM',
+      employeeName: '[AUTO-SYNC] Pangkalan Data Cawangan & Kakitangan',
+      department: metaJson,
+      officeId: 'OFF-01',
+      workDate: todayStr,
+      clockInTimeUTC: new Date().toISOString(),
+      clockInTimeKL: '-',
+      clockOutTimeKL: '-',
+      clockInLat: 5.6432,
+      clockInLng: 100.4912,
+      clockInAccuracy: 0,
+      clockInDistanceMeters: 0,
+      faceVerified: 'YES',
+      attendanceStatus: 'SYSTEM_SYNC',
+      entryType: 'SYNC_METADATA',
+      clockInRemarks: metaJson,
+      exitType: '-',
+      clockOutRemarks: '-',
+      isOutstation: false,
+      outstationLocation: '-',
+      exceptionNotes: metaJson,
+    };
+
+    // 1. Update SYS-DB-SYNC row via SAVE_ATTENDANCE (works on both V1 and V2 Apps Script deployments!)
+    await this.postToAppsScript(webhookUrl, {
+      action: 'SAVE_ATTENDANCE',
+      record: sysSyncRecord,
+    });
+
+    // 2. Also send SYNC_ALL with sysSyncRecord FIRST so Kehadiran, Kakitangan, and Cawangan stay in sync
     await this.postToAppsScript(webhookUrl, {
       action: 'SYNC_ALL',
-      records: safeRecords,
+      records: [sysSyncRecord, ...safeRecords],
       employees: safeEmployees,
       offices,
     });

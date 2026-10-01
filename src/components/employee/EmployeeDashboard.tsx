@@ -129,13 +129,11 @@ export const EmployeeDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="px-2.5 py-1 rounded-xl bg-white border border-emerald-500/30 shadow-sm flex items-center justify-center">
-              <img
-                src={HALAGEL_LOGO}
-                alt="Halagel Logo"
-                className="h-6 w-auto object-contain"
-              />
-            </div>
+            <img
+              src={HALAGEL_LOGO}
+              alt="Halagel Logo"
+              className="h-9 w-auto object-contain"
+            />
             {Boolean(googleSheetsDb.getSavedSpreadsheetId() || googleSheetsDb.getSavedWebhookUrl()) && (
               <span className="hidden sm:flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
