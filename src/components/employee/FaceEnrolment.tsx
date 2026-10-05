@@ -111,18 +111,18 @@ export const FaceEnrolment: React.FC<FaceEnrolmentProps> = ({ onBack, onSuccess 
   };
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col p-4 sm:p-6 max-w-xl mx-auto">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col p-4 sm:p-6 max-w-xl mx-auto font-sans">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={onBack}
-          className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+          className="p-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs transition cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-xl font-bold text-white">Pendaftaran Wajah Biometrik</h1>
-          <p className="text-xs text-slate-400">Halagel (M) Sdn Bhd • Pengecaman Wajah Kehadiran</p>
+          <h1 className="text-xl font-black text-slate-900">Pendaftaran Wajah Biometrik</h1>
+          <p className="text-xs text-slate-500">Halagel (M) Sdn Bhd • Pengecaman Wajah Kehadiran</p>
         </div>
       </div>
 
@@ -130,62 +130,62 @@ export const FaceEnrolment: React.FC<FaceEnrolmentProps> = ({ onBack, onSuccess 
       <canvas ref={canvasRef} className="hidden" />
 
       {success ? (
-        <div className="bg-[#182234] border border-slate-700/80 rounded-3xl p-8 text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white border border-emerald-200 rounded-3xl p-8 text-center space-y-5 shadow-xl animate-in fade-in zoom-in-95 duration-200">
           <div className="relative w-24 h-24 mx-auto">
             {enrolledPhoto ? (
               <img
                 src={enrolledPhoto}
                 alt="Wajah Berdaftar"
-                className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)]"
+                className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500 shadow-lg shadow-emerald-500/25"
               />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-400">
+              <div className="w-24 h-24 rounded-full bg-emerald-50 border-2 border-emerald-500 flex items-center justify-center text-emerald-600">
                 <CheckCircle className="w-12 h-12" />
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center border-2 border-[#182234]">
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center border-2 border-white shadow-xs">
               <CheckCircle className="w-5 h-5" />
             </div>
           </div>
 
           <div>
-            <h3 className="text-xl font-extrabold text-white">Wajah Anda Berjaya Didaftarkan!</h3>
-            <p className="text-xs text-emerald-400 font-semibold mt-1">
+            <h3 className="text-xl font-black text-slate-900">Wajah Anda Berjaya Didaftarkan!</h3>
+            <p className="text-xs text-emerald-700 font-bold mt-1">
               Profil Biometrik: {user?.name} ({user?.employeeId})
             </p>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed">
+            <p className="text-xs text-slate-600 max-w-sm mx-auto mt-2 leading-relaxed">
               Mulai sekarang, anda boleh menggunakan <strong>Pengecaman Wajah</strong> secara automatik semasa merakam jam masuk dan keluar kerja.
             </p>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 space-y-1 text-left">
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5 text-left">
             <div className="flex justify-between">
-              <span className="text-slate-400">Status Pendaftaran:</span>
-              <span className="text-emerald-400 font-bold">Aktif & Disahkan</span>
+              <span className="text-slate-500">Status Pendaftaran:</span>
+              <span className="text-emerald-700 font-bold">✓ Aktif & Disahkan</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Pematuhan:</span>
-              <span className="text-slate-200">PDPA 2010 (Vektor 128-bit Disulitkan)</span>
+              <span className="text-slate-500">Pematuhan:</span>
+              <span className="text-slate-800 font-medium">PDPA 2010 (Vektor 128-bit Disulitkan)</span>
             </div>
           </div>
 
           <button
             onClick={onSuccess}
-            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+            className="w-full py-3.5 px-4 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-bold text-sm shadow-md shadow-[#5b7e22]/25 transition cursor-pointer"
           >
             Selesai & Ke Papan Pemuka
           </button>
         </div>
       ) : (
-        <div className="bg-[#182234] border border-slate-700/80 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs">
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
               {error}
             </div>
           )}
 
           {/* Live Camera Box with Biometric HUD */}
-          <div className="relative w-full h-72 bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 flex items-center justify-center">
+          <div className="relative w-full h-72 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
             <video
               ref={videoRef}
               autoPlay
@@ -212,7 +212,7 @@ export const FaceEnrolment: React.FC<FaceEnrolmentProps> = ({ onBack, onSuccess 
               </div>
             )}
 
-            {/* Futuristic Biometric Face Scanner Oval & HUD */}
+            {/* Biometric Face Scanner Oval & HUD */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="relative w-44 h-56 border-2 border-emerald-400 rounded-[50%] border-dashed shadow-[0_0_20px_rgba(16,185,129,0.3)]">
                 {/* Scanning laser beam animation */}
@@ -230,15 +230,15 @@ export const FaceEnrolment: React.FC<FaceEnrolmentProps> = ({ onBack, onSuccess 
           </div>
 
           {/* Privacy Consent Box */}
-          <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-start gap-3">
+          <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
             <input
               type="checkbox"
               id="consent"
               checked={consentChecked}
               onChange={(e) => setConsentChecked(e.target.checked)}
-              className="mt-1 w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+              className="mt-1 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
             />
-            <label htmlFor="consent" className="text-xs text-slate-300 leading-relaxed cursor-pointer select-none">
+            <label htmlFor="consent" className="text-xs text-slate-700 leading-relaxed cursor-pointer select-none">
               Saya bersetuju memberi kebenaran kepada <strong>Halagel (M) Sdn Bhd</strong> untuk memproses templat matematik wajah saya semata-mata bagi tujuan rekod kehadiran kerja, mematuhi Akta Perlindungan Data Peribadi (PDPA 2010).
             </label>
           </div>
@@ -246,11 +246,11 @@ export const FaceEnrolment: React.FC<FaceEnrolmentProps> = ({ onBack, onSuccess 
           <button
             onClick={handleEnrol}
             disabled={loading || !consentChecked}
-            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer shadow-lg shadow-emerald-500/20"
+            className="w-full py-3.5 px-4 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer shadow-md shadow-[#5b7e22]/25"
           >
             {loading ? (
               <>
-                <RefreshCw className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                <RefreshCw className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Menjana Templat Biometrik...</span>
               </>
             ) : (

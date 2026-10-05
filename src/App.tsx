@@ -31,13 +31,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center p-4 text-slate-100">
-          <div className="max-w-md w-full bg-[#182234] border border-red-500/40 rounded-3xl p-6 shadow-2xl text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 flex items-center justify-center mx-auto text-xl font-bold">
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-slate-800">
+          <div className="max-w-md w-full bg-white border border-red-200 rounded-3xl p-6 shadow-xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mx-auto text-xl font-bold">
               ⚠️
             </div>
-            <h2 className="text-lg font-bold text-white">Sistem Mengalami Masalah Sementara</h2>
-            <p className="text-xs text-slate-400">
+            <h2 className="text-lg font-bold text-slate-900">Sistem Mengalami Masalah Sementara</h2>
+            <p className="text-xs text-slate-500">
               Sila muat semula halaman untuk menyambung sesi kehadiran Halagel anda.
             </p>
             <button
@@ -45,7 +45,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
             >
               Muat Semula Halaman (Reload)
             </button>
@@ -62,9 +62,9 @@ const AppContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center text-slate-100">
-        <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs text-slate-400 font-semibold tracking-wide">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-800">
+        <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs text-slate-600 font-semibold tracking-wide">
           Memuatkan Sistem Kehadiran Halagel...
         </p>
       </div>

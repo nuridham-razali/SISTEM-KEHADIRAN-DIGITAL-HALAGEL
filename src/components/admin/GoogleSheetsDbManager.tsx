@@ -329,30 +329,30 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
   return (
     <div className="space-y-4">
       {/* Top Banner */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900 via-[#182234] to-slate-900 border border-slate-700/80 shadow-xl space-y-4">
+      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
               <FileSpreadsheet className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-bold text-white">Pangkalan Data Google Sheets (Auto-Sync Dua Hala)</h3>
+                <h3 className="text-base font-bold text-slate-900">Pangkalan Data Google Sheets (Auto-Sync Dua Hala)</h3>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                     isWebhookActive
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-slate-800 text-slate-400'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}
                 >
                   {isWebhookActive ? '✓ Auto-Sync 100% Aktif' : 'Belum Bersambung'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-600">
                 Penyegerakan dua hala berjalan secara automatik sepenuhnya (Setiap perubahan di Google Sheets terus dikemas kini ke aplikasi, dan sebaliknya).
               </p>
               {lastSyncTime && (
-                <p className="text-[11px] text-emerald-400 font-medium mt-1">
+                <p className="text-[11px] text-emerald-700 font-semibold mt-1">
                   ⟳ Penyegerakan automatik terakhir: {lastSyncTime} (Auto-segerak setiap 4 saat)
                 </p>
               )}
@@ -366,7 +366,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
                 type="button"
                 disabled={loading}
                 onClick={() => executeImmediateSync('PULL')}
-                className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>{loading ? 'Menyegerak...' : 'Auto-Sync Aktif (Semak Sekarang)'}</span>
@@ -379,14 +379,14 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
           <div
             className={`p-3 rounded-2xl text-xs flex items-center justify-between ${
               statusMessage.type === 'success'
-                ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
                 : statusMessage.type === 'error'
-                ? 'bg-red-500/15 border border-red-500/40 text-red-300'
-                : 'bg-blue-500/15 border border-blue-500/40 text-blue-300'
+                ? 'bg-red-50 border border-red-200 text-red-800'
+                : 'bg-blue-50 border border-blue-200 text-blue-800'
             }`}
           >
             <span>{statusMessage.text}</span>
-            <button onClick={() => setStatusMessage(null)} className="text-slate-400 hover:text-white px-2">
+            <button onClick={() => setStatusMessage(null)} className="text-slate-400 hover:text-slate-700 px-2 cursor-pointer">
               ✕
             </button>
           </div>
@@ -394,11 +394,11 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
       </div>
 
       {/* Main Google Sheets Config Card */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-[#182234] border border-slate-800 shadow-xl space-y-4">
-        <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 p-3.5 rounded-2xl">
-          <ArrowLeftRight className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-300 space-y-1">
-            <strong className="text-emerald-300 font-bold block text-sm">
+      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-start gap-3 bg-emerald-50/80 border border-emerald-200 p-3.5 rounded-2xl">
+          <ArrowLeftRight className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+          <div className="text-xs text-slate-700 space-y-1">
+            <strong className="text-emerald-900 font-bold block text-sm">
               Penyegerakan Dua Hala (Two-Way Sync) Google Sheets ↔ Aplikasi
             </strong>
             <p>
@@ -408,14 +408,14 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
         </div>
 
         {/* Webhook URL Input */}
-        <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-700/80 space-y-3">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-            <label className="block text-xs font-bold text-white">
+            <label className="block text-xs font-bold text-slate-900">
               1. Web App URL Google Apps Script (Wajib untuk Baca & Tulis):
             </label>
             {googleSheetsDb.getDefaultWebhookUrl() && (
-              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1 self-start sm:self-auto">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1 self-start sm:self-auto">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
                 {googleSheetsDb.isUsingDefaultWebhook()
                   ? '✓ Menggunakan URL Kod Asal (src/config/database.ts)'
                   : 'Tetapan Diubah Suai Tempatan'}
@@ -431,7 +431,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
                 placeholder="https://script.google.com/macros/s/AKfycb.../exec"
                 value={webhookUrlInput}
                 onChange={(e) => setWebhookUrlInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-xs"
               />
             </div>
 
@@ -439,7 +439,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
               type="button"
               disabled={loading || !webhookUrlInput.trim()}
               onClick={handleSaveConfig}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+              className="px-4 py-2 rounded-xl bg-[#588517] hover:bg-[#4c7512] disabled:opacity-50 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
             >
               <Check className="w-4 h-4" />
               <span>{loading ? 'Menyambung...' : 'Simpan & Segerak'}</span>
@@ -449,12 +449,12 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
               type="button"
               disabled={testingWebhook || !webhookUrlInput.trim()}
               onClick={handleTestWebhook}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 border border-slate-600/60"
+              className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 border border-slate-300 shadow-xs"
             >
               {testingWebhook ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
               ) : (
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <Zap className="w-3.5 h-3.5 text-amber-600" />
               )}
               <span>{testingWebhook ? 'Menguji...' : 'Uji Sambungan'}</span>
             </button>
@@ -463,7 +463,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
               <button
                 type="button"
                 onClick={handleResetToDefaultWebhook}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold transition cursor-pointer shrink-0"
+                className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-amber-800 border border-amber-300 text-xs font-semibold transition cursor-pointer shrink-0"
               >
                 Guna URL Asal
               </button>
@@ -473,7 +473,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
               <button
                 type="button"
                 onClick={handleRemoveWebhook}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 text-xs font-semibold transition cursor-pointer shrink-0"
+                className="px-3 py-2 rounded-xl bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-semibold transition cursor-pointer shrink-0"
               >
                 Reset
               </button>
@@ -481,9 +481,9 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
           </div>
 
           {/* Optional Direct Google Sheet Link / ID */}
-          <div className="pt-3 border-t border-slate-800 space-y-2">
+          <div className="pt-3 border-t border-slate-200 space-y-2">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-white">
+              <label className="block text-xs font-bold text-slate-900">
                 2. Pautan / ID Google Sheet Anda (Pilihan untuk Butang Buka Terus & Bacaan Pantas):
               </label>
               {sheetInfo && (
@@ -491,7 +491,7 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
                   href={sheetInfo.spreadsheetUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[11px] font-bold text-emerald-400 hover:underline inline-flex items-center gap-1"
+                  className="text-[11px] font-bold text-emerald-700 hover:underline inline-flex items-center gap-1"
                 >
                   <span>Buka Google Sheet</span>
                   <ExternalLink className="w-3 h-3" />
@@ -504,12 +504,12 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
                 placeholder="https://docs.google.com/spreadsheets/d/.../edit"
                 value={sheetUrlInput}
                 onChange={(e) => setSheetUrlInput(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-xs"
               />
               <button
                 type="button"
                 onClick={handleSaveSheetLink}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition cursor-pointer shrink-0"
+                className="px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-bold transition cursor-pointer shrink-0 shadow-xs"
               >
                 Simpan Pautan Sheet
               </button>
@@ -517,8 +517,8 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
           </div>
 
           {isWebhookActive && (
-            <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold pt-1">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <div className="flex items-center gap-2 text-xs text-emerald-700 font-semibold pt-1">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
               <span>
                 Pangkalan data Google Sheets aktif! Setiap Clock In / Out, penambahan/pemadaman staf, atau pemadaman terus di Google Sheets diselaraskan secara automatik.
               </span>
@@ -528,71 +528,71 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
 
         {/* 3 Step Guide & Apps Script V2 Code */}
         <div className="space-y-3">
-          <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
             <span>Panduan Kod Google Apps Script (Sokongan Penuh Dua Hala):</span>
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-slate-700">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-[#588517] text-white font-bold flex items-center justify-center text-[11px]">
                   1
                 </span>
-                <strong className="text-white">Buka Google Sheets</strong>
+                <strong className="text-slate-900">Buka Google Sheets</strong>
               </div>
-              <p className="text-slate-400 text-[11px]">
+              <p className="text-slate-600 text-[11px]">
                 Buka fail Google Sheet pangkalan data kehadiran Halagel anda.
               </p>
               <a
                 href={sheetInfo?.spreadsheetUrl || 'https://sheets.new'}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:underline pt-1"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:underline pt-1"
               >
                 {sheetInfo ? 'Buka Google Sheet Anda' : 'Buka Google Sheet Baharu'} <ExternalLink className="w-3 h-3" />
               </a>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-slate-700">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-[#588517] text-white font-bold flex items-center justify-center text-[11px]">
                   2
                 </span>
-                <strong className="text-white">Tampal Kod Apps Script V2</strong>
+                <strong className="text-slate-900">Tampal Kod Apps Script V2</strong>
               </div>
-              <p className="text-slate-400 text-[11px]">
+              <p className="text-slate-600 text-[11px]">
                 Di Google Sheets, klik <strong>Extensions &gt; Apps Script</strong> dan tampal kod skrip Dua Hala di bawah:
               </p>
               <button
                 type="button"
                 onClick={handleCopyScript}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Copy className="w-3 h-3" />
                 <span>{isCopied ? '✓ Disalin ke Papan Keratan!' : 'Salin Kod Apps Script V2'}</span>
               </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700/80 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-slate-700">
               <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-bold flex items-center justify-center text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-[#588517] text-white font-bold flex items-center justify-center text-[11px]">
                   3
                 </span>
-                <strong className="text-white">Deploy Web App</strong>
+                <strong className="text-slate-900">Deploy Web App</strong>
               </div>
-              <p className="text-slate-400 text-[11px]">
+              <p className="text-slate-600 text-[11px]">
                 Klik <strong>Deploy &gt; New deployment &gt; Web app</strong> (Who has access: <em>Anyone</em>). Salin Web app URL ke kotak di atas.
               </p>
             </div>
           </div>
 
           {/* Leading Zero (0) Staff ID Guide */}
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-slate-300 space-y-1.5">
-            <div className="font-bold text-amber-300 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1.5">
+            <div className="font-bold text-amber-950 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
               <span>Penyelesaian Isu ID Staf Bermula Dengan Angka "0" (Contoh: 0123 / 0045) Di Google Sheets</span>
             </div>
-            <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-1 leading-relaxed">
+            <ul className="list-disc list-inside text-[11px] text-amber-900 space-y-1 leading-relaxed">
               <li>
                 <strong>Automatik Dari Aplikasi:</strong> Setiap kali ID Staf bermula dengan <code>0</code> disimpan dari aplikasi ini, sistem secara automatik menghantar awalan teks (<code>'0123</code>) dan menetapkan format <code>Plain Text (@)</code> supaya Google Sheets tidak membuang angka <code>0</code>.
               </li>
@@ -603,12 +603,12 @@ export const GoogleSheetsDbManager: React.FC<GoogleSheetsDbManagerProps> = ({ on
           </div>
 
           {/* Vercel Multi-Device Guide */}
-          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-slate-300 space-y-2">
-            <div className="font-bold text-blue-300 flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+          <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 space-y-2">
+            <div className="font-bold text-blue-950 flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Konfigurasi Kekal Merentasi Semua Peranti (Tanpa Firebase)</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
+            <p className="text-[11px] text-blue-900 leading-relaxed">
               URL Google Apps Script disimpan terus dalam <code>src/config/database.ts</code> atau pembolehubah persekitaran <code>VITE_GOOGLE_APPS_SCRIPT_URL</code> supaya semua peranti kakitangan membaca dan menulis terus ke Google Sheet yang sama.
             </p>
           </div>

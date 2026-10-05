@@ -295,28 +295,28 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   // If user has NOT enrolled face, prompt them to register face first!
   if (!hasFaceEnrolled) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-[#182234] border border-amber-500/50 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center mx-auto text-amber-400">
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white border border-amber-300 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center space-y-4 text-slate-900">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600">
             <Lock className="w-8 h-8" />
           </div>
 
           <div>
-            <h3 className="text-lg font-bold text-white">Wajah Anda Belum Didaftarkan!</h3>
-            <p className="text-xs text-amber-300 font-semibold mt-0.5">
+            <h3 className="text-lg font-black text-slate-900">Wajah Anda Belum Didaftarkan!</h3>
+            <p className="text-xs text-amber-800 font-bold mt-0.5">
               Pengecaman Wajah Wajib untuk Merekod Kehadiran
             </p>
-            <p className="text-xs text-slate-300 mt-2.5 leading-relaxed">
+            <p className="text-xs text-slate-600 mt-2.5 leading-relaxed">
               Polisi rasmi <strong>Halagel (M) Sdn Bhd</strong> mewajibkan setiap kakitangan mendaftar templat biometrik wajah terlebih dahulu sebelum dibenarkan membuat <strong>Rakam Masuk</strong> atau <strong>Rakam Keluar</strong>.
             </p>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-400 text-left space-y-1">
-            <div className="flex items-center gap-1.5 text-white font-medium">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 text-left space-y-1">
+            <div className="flex items-center gap-1.5 text-slate-900 font-semibold">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>Pendaftaran Pantas (Kurang 30 Saat)</span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-500">
               Kamera akan mengimbas struktur wajah anda untuk menghasilkan templat biometrik yang disulitkan secara selamat mengikut piawaian PDPA 2010.
             </p>
           </div>
@@ -325,7 +325,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
             >
               Batal
             </button>
@@ -335,7 +335,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 onClose();
                 onNavigateToFaceEnrol?.();
               }}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+              className="flex-1 py-3 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#5b7e22]/25 transition cursor-pointer"
             >
               <ScanFace className="w-4 h-4" />
               <span>Daftar Wajah Sekarang</span>
@@ -366,29 +366,29 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
   const activePresets = isClockIn ? clockInPresets : clockOutPresets;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-[#182234] border border-slate-700/80 rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative my-auto max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl relative my-auto max-h-[95vh] overflow-y-auto text-slate-900">
         {/* Hidden Canvas for Live Video Snapping */}
         <canvas ref={canvasRef} className="hidden" />
 
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-3">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <span>{isClockIn ? 'Rakam Kehadiran Masuk' : 'Rakam Kehadiran Keluar'}</span>
               {isOutstationMode && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold">
                   Outstation
                 </span>
               )}
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Langkah {currentStep} dari 3 • {currentStep === 1 ? 'Lokasi & Catatan Kehadiran' : currentStep === 2 ? 'Pengecaman Wajah' : 'Pengesahan Sah'}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+            className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -396,22 +396,22 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
         {/* Step Indicator */}
         <div className="flex items-center justify-between px-6 mb-4">
-          <div className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 1 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+          <div className={`flex flex-col items-center gap-1 ${currentStep >= 1 ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 1 ? 'bg-emerald-100 border border-emerald-400 text-emerald-800' : 'bg-slate-100 border border-slate-200 text-slate-400'}`}>
               1
             </div>
             <span className="text-[10px]">Lokasi & Catatan</span>
           </div>
-          <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 2 ? 'bg-emerald-500' : 'bg-slate-800'}`} />
-          <div className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 2 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+          <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 2 ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+          <div className={`flex flex-col items-center gap-1 ${currentStep >= 2 ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 2 ? 'bg-emerald-100 border border-emerald-400 text-emerald-800' : 'bg-slate-100 border border-slate-200 text-slate-400'}`}>
               2
             </div>
             <span className="text-[10px]">Wajah</span>
           </div>
-          <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 3 ? 'bg-emerald-500' : 'bg-slate-800'}`} />
-          <div className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? 'text-emerald-400' : 'text-slate-500'}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 3 ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-slate-800 border border-slate-700'}`}>
+          <div className={`flex-1 h-0.5 mx-2 ${currentStep >= 3 ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+          <div className={`flex flex-col items-center gap-1 ${currentStep >= 3 ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= 3 ? 'bg-emerald-100 border border-emerald-400 text-emerald-800' : 'bg-slate-100 border border-slate-200 text-slate-400'}`}>
               3
             </div>
             <span className="text-[10px]">Selesai</span>
@@ -422,17 +422,17 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         {currentStep === 1 && (
           <div className="space-y-4">
             {/* Mode Selector: Premis Kilang vs Kerja Luar Kawasan (Outstation) */}
-            <div className="p-1 rounded-2xl bg-slate-900 border border-slate-700/80 flex gap-1">
+            <div className="p-1 rounded-2xl bg-slate-100 border border-slate-200 flex gap-1">
               <button
                 type="button"
                 onClick={() => handleToggleOutstation(false)}
                 className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   !isOutstationMode
-                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Building2 className="w-3.5 h-3.5" />
+                <Building2 className="w-3.5 h-3.5 text-[#5b7e22]" />
                 <span>Premis Kilang / Pejabat</span>
               </button>
 
@@ -441,8 +441,8 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 onClick={() => handleToggleOutstation(true)}
                 className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   isOutstationMode
-                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/25'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Car className="w-3.5 h-3.5" />
@@ -452,27 +452,27 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
             {/* Error Message Alert */}
             {errorMessage && (
-              <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div className="leading-snug">{errorMessage}</div>
               </div>
             )}
 
             {/* 1. OUTSTATION MODE CONFIG */}
             {isOutstationMode ? (
-              <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-xs space-y-2.5">
-                <div className="flex items-center gap-2 text-blue-300 font-bold">
-                  <Car className="w-4 h-4 text-blue-400" />
+              <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-xs space-y-2.5">
+                <div className="flex items-center gap-2 text-purple-900 font-bold">
+                  <Car className="w-4 h-4 text-purple-600" />
                   <span>Mod Tugasan Luar Kawasan (Outstation)</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
+                <p className="text-[11px] text-slate-600 leading-relaxed">
                   Pengecualian radius geofens kilang diaktifkan. Anda dibenarkan {isClockIn ? 'daftar masuk' : 'daftar keluar'} dari lokasi luar kawasan kerja anda.
                 </p>
 
                 {/* Outstation Location Input (Required) */}
                 <div className="pt-1">
-                  <label className="block text-[11px] font-bold text-white mb-1">
-                    Nama Lokasi / Tapak Luar Kawasan: <span className="text-red-400">*</span>
+                  <label className="block text-[11px] font-bold text-slate-900 mb-1">
+                    Nama Lokasi / Tapak Luar Kawasan: <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -483,19 +483,19 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                       if (errorMessage) setErrorMessage(null);
                     }}
                     placeholder="Contoh: Tapak Projek Kulim / Pembekal Hardware Indah"
-                    className="w-full bg-slate-900 border border-blue-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
+                    className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 shadow-xs"
                   />
-                  <p className="text-[10px] text-blue-300/80 mt-1">
+                  <p className="text-[10px] text-purple-700 mt-1">
                     *Wajib dinyatakan supaya pihak pentadbir Halagel dapat merekodkan destinasi rasmi anda.
                   </p>
                 </div>
 
-                <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="p-2 rounded-xl bg-white border border-purple-200 text-[10px] text-slate-600 flex items-center justify-between">
                   <span className="flex items-center gap-1">
-                    <Navigation className="w-3 h-3 text-blue-400" />
+                    <Navigation className="w-3 h-3 text-purple-600" />
                     GPS Semasa: {userLocation ? `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Dikesan'}
                   </span>
-                  <span className="text-emerald-400 font-semibold">✓ Koordinat Ditandai Outstation</span>
+                  <span className="text-emerald-700 font-bold">✓ Koordinat Ditandai Outstation</span>
                 </div>
               </div>
             ) : (
@@ -511,28 +511,28 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 />
 
                 {isInsideRadius ? (
-                  <div className="p-3 rounded-2xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="p-3 rounded-2xl border bg-emerald-50 border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-semibold text-white">
+                      <p className="font-bold text-slate-900">
                         Anda berada dalam zon cawangan sah
                       </p>
-                      <p className="text-[11px] mt-0.5 opacity-90">
+                      <p className="text-[11px] mt-0.5 text-slate-600">
                         Jarak ke {assignedOffice?.name}: {distanceToOffice ?? 0}m (Had Zon: {assignedOffice?.radiusMeters}m).
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-2xl border bg-red-500/15 border-red-500/40 text-red-300 text-xs flex items-start gap-2.5 shadow-lg">
-                    <AlertOctagon className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                  <div className="p-3 rounded-2xl border bg-red-50 border-red-200 text-red-900 text-xs flex items-start gap-2.5 shadow-xs">
+                    <AlertOctagon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-bold text-white text-xs">
+                      <p className="font-bold text-red-950 text-xs">
                         Rakam Kehadiran Diblok: Luar Radius Kilang
                       </p>
-                      <p className="text-[11px] mt-1 text-red-200 leading-snug">
+                      <p className="text-[11px] mt-1 text-slate-700 leading-snug">
                         Jarak anda <strong>{distanceToOffice ?? 0}m</strong> melebihi had radius geofens cawangan (<strong>{assignedOffice?.radiusMeters}m</strong>).
                       </p>
-                      <p className="text-[10px] text-amber-300 font-semibold mt-1">
+                      <p className="text-[10px] text-amber-800 font-semibold mt-1">
                         👉 Jika anda berada di luar untuk urusan kerja luar/projek, sila tekan butang <strong>"Kerja Luar Kawasan (Outstation)"</strong> di atas.
                       </p>
                     </div>
@@ -543,7 +543,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
             {/* 3. TUJUAN KELUAR/MASUK (PRESETS) */}
             <div className="space-y-2 pt-1">
-              <label className="block text-xs font-bold text-white">
+              <label className="block text-xs font-bold text-slate-900">
                 {isClockIn ? 'Tujuan / Kategori Daftar Masuk:' : 'Tujuan / Kategori Daftar Keluar:'}
               </label>
 
@@ -561,22 +561,22 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                           setIsOutstationMode(true);
                         }
                       }}
-                      className={`p-2 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
                         isSelected
-                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 font-bold'
-                          : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700'
+                          ? 'bg-emerald-50 border-emerald-500 text-slate-900 font-bold ring-2 ring-emerald-500/20'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+                        <div className={`p-1.5 rounded-lg ${isSelected ? 'bg-emerald-100 text-emerald-800' : 'bg-white text-slate-500 border border-slate-200'}`}>
                           <Icon className="w-3.5 h-3.5" />
                         </div>
                         <div>
-                          <div className="text-xs">{preset.label}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{preset.desc}</div>
+                          <div className="text-xs font-semibold text-slate-900">{preset.label}</div>
+                          <div className="text-[10px] text-slate-500 font-normal">{preset.desc}</div>
                         </div>
                       </div>
-                      {isSelected && <span className="text-emerald-400 font-bold text-xs">✓</span>}
+                      {isSelected && <span className="text-emerald-700 font-black text-xs">✓</span>}
                     </button>
                   );
                 })}
@@ -586,11 +586,11 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
             {/* 4. KOTAK REMARK / CATATAN TAMBAHAN (USER REQUEST) */}
             <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-[#5b7e22]" />
                   <span>Kotak Catatan Tambahan (Remark):</span>
                 </label>
-                <span className="text-[10px] text-slate-400">Pilihan / Opsional</span>
+                <span className="text-[10px] text-slate-500">Pilihan / Opsional</span>
               </div>
               <textarea
                 rows={2}
@@ -601,9 +601,9 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                     ? 'Contoh: Masuk selepas pembelian barang kilang di hardware / Masuk selepas urusan bank'
                     : 'Contoh: Keluar membeli alat ganti mesin pembungkusan / Keluar rehat makan tengah hari / Balik tamat syif'
                 }
-                className="w-full bg-slate-900 border border-slate-700/90 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 resize-none"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-emerald-500 resize-none shadow-xs"
               />
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-slate-500">
                 *Catatan ini akan direkodkan secara rasmi ke dalam log kehadiran dan diselaraskan ke Google Sheets.
               </p>
             </div>
@@ -615,7 +615,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 onClick={handleSearchLocation}
                 disabled={isSearchingLocation}
                 title="Kemas kini isyarat GPS"
-                className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center transition cursor-pointer"
+                className="p-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-center transition cursor-pointer"
               >
                 <RefreshCw className={`w-4 h-4 ${isSearchingLocation ? 'animate-spin' : ''}`} />
               </button>
@@ -627,10 +627,10 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 onClick={proceedToPhotoStep}
                 className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
                   isOutstationMode
-                    ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer shadow-lg shadow-blue-500/25 active:scale-[0.98]'
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer shadow-md shadow-purple-600/25 active:scale-[0.98]'
                     : isInsideRadius
-                    ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-[0.98]'
-                    : 'bg-slate-800/80 text-slate-500 border border-slate-700/80 cursor-not-allowed opacity-60'
+                    ? 'bg-[#5b7e22] hover:bg-[#4d6b1d] text-white cursor-pointer shadow-md shadow-[#5b7e22]/25 active:scale-[0.98]'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                 }`}
               >
                 <span>
@@ -650,30 +650,30 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         {currentStep === 2 && (
           <div className="space-y-4">
             {/* Target Profile & Selected Context Bar */}
-            <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 {enrolledPhoto ? (
                   <img
                     src={enrolledPhoto}
                     alt="Foto Profil"
-                    className="w-8 h-8 rounded-full object-cover border border-emerald-400"
+                    className="w-8 h-8 rounded-full object-cover border border-emerald-500"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-bold">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold">
                     {user?.name.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <div className="text-white font-bold text-[11px]">{user?.name} ({user?.employeeId})</div>
-                  <div className="text-[10px] text-slate-400 line-clamp-1">
+                  <div className="text-slate-900 font-bold text-[11px]">{user?.name} ({user?.employeeId})</div>
+                  <div className="text-[10px] text-slate-500 line-clamp-1">
                     {selectedPreset} {customRemark ? `• ${customRemark}` : ''}
                   </div>
                 </div>
               </div>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 isOutstationMode
-                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
               }`}>
                 {isOutstationMode ? 'Outstation' : 'Premis Kilang'}
               </span>
@@ -681,14 +681,14 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
 
             {/* Error Message Alert */}
             {errorMessage && (
-              <div className="p-3 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div className="leading-snug">{errorMessage}</div>
               </div>
             )}
 
             {/* Video Feed with Biometric Scanner Mesh */}
-            <div className="relative w-full h-64 bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 flex items-center justify-center">
+            <div className="relative w-full h-64 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center">
               <video
                 ref={videoRef}
                 autoPlay
@@ -773,7 +773,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
               <button
                 type="button"
                 onClick={() => setCurrentStep(1)}
-                className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                className="py-3 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
               >
                 Kembali
               </button>
@@ -781,16 +781,16 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 type="button"
                 disabled={isRecognizing}
                 onClick={handleRunFaceRecognition}
-                className="flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-60 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+                className="flex-1 py-3.5 px-4 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-extrabold text-sm flex items-center justify-center gap-2 transition disabled:opacity-60 cursor-pointer shadow-md shadow-[#5b7e22]/25 active:scale-[0.98]"
               >
                 {isRecognizing ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
                     <span>Mengesahkan Pengecaman Wajah...</span>
                   </>
                 ) : (
                   <>
-                    <ScanFace className="w-5 h-5 text-slate-950" />
+                    <ScanFace className="w-5 h-5 text-white" />
                     <span>Imbas Wajah & Sahkan Kehadiran</span>
                   </>
                 )}
@@ -802,46 +802,46 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
         {/* STEP 3: BERJAYA */}
         {currentStep === 3 && (
           <div className="space-y-4 text-center py-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center mx-auto text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-500 flex items-center justify-center mx-auto text-emerald-600 shadow-md shadow-emerald-500/20">
               <CheckCircle className="w-10 h-10" />
             </div>
 
             <div>
-              <h4 className="text-lg font-bold text-white">
+              <h4 className="text-lg font-black text-slate-900">
                 {isClockIn ? 'Berjaya Rakam Kehadiran Masuk!' : 'Berjaya Rakam Kehadiran Keluar!'}
               </h4>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Pengecaman biometrik wajah disahkan & data disimpan ke pangkalan data Halagel
               </p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700 text-xs text-left space-y-2">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-left space-y-2 text-slate-700">
               <div className="flex justify-between">
-                <span className="text-slate-400">Pekerja:</span>
-                <span className="text-white font-medium">{user?.name} ({user?.employeeId})</span>
+                <span className="text-slate-500">Pekerja:</span>
+                <span className="text-slate-900 font-bold">{user?.name} ({user?.employeeId})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Mod Kehadiran:</span>
-                <span className={`font-bold ${isOutstationMode ? 'text-blue-400' : 'text-emerald-400'}`}>
+                <span className="text-slate-500">Mod Kehadiran:</span>
+                <span className={`font-bold ${isOutstationMode ? 'text-purple-700' : 'text-emerald-700'}`}>
                   {isOutstationMode ? `Luar Kawasan (${outstationLocation || 'Outstation'})` : assignedOffice?.name}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Tujuan / Remark:</span>
-                <span className="text-white font-medium text-right max-w-[200px]">
+                <span className="text-slate-500">Tujuan / Remark:</span>
+                <span className="text-slate-900 font-medium text-right max-w-[200px]">
                   {selectedPreset}
                   {customRemark ? ` (${customRemark})` : ''}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Pengecaman Wajah:</span>
-                <span className="text-emerald-400 font-bold">
+                <span className="text-slate-500">Pengecaman Wajah:</span>
+                <span className="text-emerald-700 font-bold">
                   ✓ Disahkan ({matchScore ?? 96}% Padanan Biometrik)
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Waktu Rekod (KL):</span>
-                <span className="text-white font-medium">
+                <span className="text-slate-500">Waktu Rekod (KL):</span>
+                <span className="text-slate-900 font-semibold font-mono">
                   {new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: true })}
                 </span>
               </div>
@@ -853,7 +853,7 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
                 onSuccess();
                 onClose();
               }}
-              className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-sm transition cursor-pointer shadow-lg shadow-emerald-500/20"
+              className="w-full py-3.5 px-4 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-bold text-sm transition cursor-pointer shadow-md shadow-[#5b7e22]/25"
             >
               Kembali ke Papan Pemuka
             </button>

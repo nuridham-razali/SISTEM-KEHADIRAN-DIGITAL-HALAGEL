@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import { User, Office, AttendanceRecord, DashboardStatus, AdminMetrics, VerificationChallenge } from '../types';
 import { calculateHaversineDistance } from '../utils/geo';
 import {
@@ -9,6 +10,7 @@ import {
   formatDateToDMY,
   formatDateTimeToDMY,
   isSameWorkDate,
+  formatToTransitTime,
 } from '../utils/workingHours';
 import { googleSheetsDb } from './googleSheetsDb';
 
@@ -887,6 +889,7 @@ class HalagelApiService {
     const emps = this.getEmployeesList();
     const newEmp: User & { password?: string } = {
       employeeId: (data.employeeId || 'EMP' + (emps.length + 100)).replace(/^'+/, '').trim().toUpperCase(),
+      attdId: data.attdId != null ? String(data.attdId).replace(/^'+/, '').trim() : '',
       name: data.name || '',
       email: data.email || '',
       department: data.department || 'Pengeluaran',
@@ -921,6 +924,9 @@ class HalagelApiService {
     const cleanUpdates = { ...updates };
     if (cleanUpdates.employeeId) {
       cleanUpdates.employeeId = cleanUpdates.employeeId.replace(/^'+/, '').trim().toUpperCase();
+    }
+    if (cleanUpdates.attdId !== undefined) {
+      cleanUpdates.attdId = String(cleanUpdates.attdId ?? '').replace(/^'+/, '').trim();
     }
     const oldId = emps[idx].employeeId;
     emps[idx] = { ...emps[idx], ...cleanUpdates };
@@ -1070,6 +1076,85 @@ class HalagelApiService {
     };
   }
 
+  exportAttendanceExcel(customRecords?: AttendanceRecord[]): void {
+    const records = customRecords ?? this.getAttendanceList();
+    const emps = this.getEmployeesList();
+
+    const transitRows: Array<{ numberId: string; name: string; transitTime: string }> = [];
+
+    records.forEach((r) => {
+      const emp = emps.find((e) => this.isSameEmployeeId(e.employeeId, r.employeeId));
+      const rawAttdId = emp?.attdId ? String(emp.attdId).replace(/^'+/, '').trim() : '';
+      const numberId = rawAttdId || String(r.employeeId ?? '').replace(/^'+/, '').trim();
+      const name = emp?.name || r.employeeName || '';
+
+      if (r.clockInTimeKL && r.clockInTimeKL !== '-') {
+        const inTransit = formatToTransitTime(
+          r.clockInTimeKL,
+          r.clockInTimeUTC,
+          r.workDate,
+          r.sessionId
+        );
+        if (inTransit) {
+          transitRows.push({
+            numberId,
+            name,
+            transitTime: inTransit,
+          });
+        }
+      }
+
+      if (r.clockOutTimeKL && r.clockOutTimeKL !== '-' && r.clockOutTimeKL !== 'Belum Keluar') {
+        const outTransit = formatToTransitTime(
+          r.clockOutTimeKL,
+          r.clockOutTimeUTC,
+          r.workDate,
+          r.sessionId
+        );
+        if (outTransit) {
+          transitRows.push({
+            numberId,
+            name,
+            transitTime: outTransit,
+          });
+        }
+      }
+    });
+
+    // Sort by Transit time descending (matching the attached screenshot order)
+    transitRows.sort((a, b) => b.transitTime.localeCompare(a.transitTime));
+
+    const sheetData: any[][] = [
+      ['Number ID', 'Name', 'Transit time'],
+      ...transitRows.map((row) => [row.numberId, row.name, row.transitTime]),
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // Force "Number ID" and "Transit time" cells to be explicit Excel Text strings ('s')
+    // so leading zeros (e.g. 020001, 004164) and "YYYY-MM-DD HH:mm:ss" are 100% preserved
+    for (let rIdx = 1; rIdx < sheetData.length; rIdx++) {
+      const idCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 0 });
+      if (ws[idCellRef]) {
+        ws[idCellRef].t = 's';
+        ws[idCellRef].v = String(sheetData[rIdx][0] ?? '');
+        ws[idCellRef].z = '@';
+      }
+      const timeCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 2 });
+      if (ws[timeCellRef]) {
+        ws[timeCellRef].t = 's';
+        ws[timeCellRef].v = String(sheetData[rIdx][2] ?? '');
+        ws[timeCellRef].z = '@';
+      }
+    }
+
+    ws['!cols'] = [{ wch: 15 }, { wch: 32 }, { wch: 22 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Kehadiran');
+    XLSX.writeFile(wb, `Halagel_Kehadiran_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   async exportPayrollCsv(params?: { startDate?: string; endDate?: string }): Promise<string> {
     const data = await this.getPayrollPreview(params);
     let csv = 'ID Staf,Nama,Jabatan,Hari Bekerja,Jumlah Jam\n';
@@ -1081,15 +1166,16 @@ class HalagelApiService {
 
   async exportEmployeesCsv(): Promise<string> {
     const emps = this.getEmployeesList();
-    let csv = 'ID Staf,Nama,Emel,Jabatan,ID Cawangan,Peranan,Status Wajah,Status Akaun\n';
+    let csv = 'ID Staf,Attd ID,Nama,Emel,Jabatan,ID Cawangan,Peranan,Status Wajah,Status Akaun\n';
     emps.forEach((e) => {
-      csv += `"${e.employeeId}","${e.name}","${e.email}","${e.department}","${e.assignedOfficeId || 'OFF-01'}","${e.role}","${e.faceEnrolled ? 'Didaftar' : 'Belum Didaftar'}","${e.active ? 'Aktif' : 'Tidak Aktif'}"\n`;
+      csv += `"${e.employeeId}","${e.attdId || ''}","${e.name}","${e.email}","${e.department}","${e.assignedOfficeId || 'OFF-01'}","${e.role}","${e.faceEnrolled ? 'Didaftar' : 'Belum Didaftar'}","${e.active ? 'Aktif' : 'Tidak Aktif'}"\n`;
     });
     return csv;
   }
 
   async importEmployees(records: Array<{
     employeeId: string;
+    attdId?: string;
     name: string;
     email: string;
     department: string;
@@ -1108,11 +1194,13 @@ class HalagelApiService {
     for (const r of records) {
       if (!r.employeeId || !r.name) continue;
       const cleanId = r.employeeId.trim().toUpperCase();
+      const cleanAttdId = r.attdId ? r.attdId.replace(/^'+/, '').trim() : undefined;
       const idx = emps.findIndex((e) => e.employeeId.trim().toUpperCase() === cleanId);
 
       if (idx >= 0) {
         emps[idx] = {
           ...emps[idx],
+          attdId: cleanAttdId !== undefined ? cleanAttdId : emps[idx].attdId,
           name: r.name.trim(),
           email: r.email ? r.email.trim() : emps[idx].email,
           department: r.department ? r.department.trim() : emps[idx].department,
@@ -1125,6 +1213,7 @@ class HalagelApiService {
       } else {
         emps.push({
           employeeId: cleanId,
+          attdId: cleanAttdId || '',
           name: r.name.trim(),
           email: r.email ? r.email.trim() : `${cleanId.toLowerCase()}@halagel.com`,
           department: r.department ? r.department.trim() : 'Pengeluaran & Operasi',

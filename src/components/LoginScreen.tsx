@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { HALAGEL_LOGO } from '../assets/logo';
-import { Eye, EyeOff, User as UserIcon, Lock, ArrowRight, AlertCircle, Building2, X, Smartphone, CheckCircle2 } from 'lucide-react';
+import { getHalagelBackground } from '../assets/background';
+import { Eye, EyeOff, User as UserIcon, Lock, ArrowRight, AlertCircle, Smartphone, X } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
@@ -9,6 +10,11 @@ export const LoginScreen: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [bgImage, setBgImage] = useState<string>(getHalagelBackground());
+
+  useEffect(() => {
+    setBgImage(getHalagelBackground());
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,8 +23,18 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col justify-center items-center px-4 py-8 relative">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-2xl relative text-slate-900">
+    <div
+      className="min-h-screen text-slate-900 flex flex-col justify-center items-center px-4 py-8 relative bg-cover bg-center bg-no-repeat transition-all duration-300"
+      style={{
+        backgroundImage: `url("${bgImage}")`,
+        backgroundColor: '#F8FAFC',
+      }}
+    >
+      {/* Light frosted backdrop overlay to ensure crisp readability */}
+      <div className="absolute inset-0 bg-slate-100/60 backdrop-blur-[2px] pointer-events-none" />
+
+      {/* Pure White Login Card as requested */}
+      <div className="w-full max-w-md bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10 text-slate-900">
         {/* Halagel official logo */}
         <div className="flex flex-col items-center mb-6">
           <img
@@ -86,7 +102,7 @@ export const LoginScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700"
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -130,42 +146,42 @@ export const LoginScreen: React.FC = () => {
 
       {/* Android Install Guide Modal */}
       {showInstallGuide && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#182234] border border-slate-700 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-700/80 pb-3">
-              <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <Smartphone className="w-4 h-4 text-emerald-400" />
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative space-y-4 text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <Smartphone className="w-4 h-4 text-emerald-600" />
                 <span>Panduan Pasang di Android</span>
               </div>
               <button
                 onClick={() => setShowInstallGuide(false)}
-                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                className="p-1 rounded-lg bg-slate-100 text-slate-400 hover:text-slate-700"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-300">
+            <div className="space-y-3 text-xs text-slate-600">
               <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0 text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
                   1
                 </span>
                 <p>Buka pautan aplikasi di pelayar <strong>Google Chrome</strong> telefon anda.</p>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0 text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
                   2
                 </span>
                 <p>Tekan butang menu tiga titik <strong>(⋮)</strong> di bahagian atas kanan skrin Chrome.</p>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0 text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
                   3
                 </span>
                 <p>Pilih <strong>"Pasang Aplikasi"</strong> (Install App) atau <strong>"Tambah ke Skrin Utama"</strong> (Add to Home screen).</p>
               </div>
               <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0 text-[11px]">
+                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
                   4
                 </span>
                 <p>Ikon <strong>Halagel Kehadiran</strong> akan terpapar di skrin telefon anda seperti aplikasi natif.</p>
@@ -174,7 +190,7 @@ export const LoginScreen: React.FC = () => {
 
             <button
               onClick={() => setShowInstallGuide(false)}
-              className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition"
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
             >
               Faham, Tutup Panduan
             </button>

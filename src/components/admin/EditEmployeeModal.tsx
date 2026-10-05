@@ -30,6 +30,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   const isCreate = !employee;
 
   const [employeeId, setEmployeeId] = useState(employee?.employeeId || '');
+  const [attdId, setAttdId] = useState(employee?.attdId || '');
   const [name, setName] = useState(employee?.name || '');
   const [department, setDepartment] = useState(employee?.department || DEPARTMENTS[0]);
   const [assignedOfficeId, setAssignedOfficeId] = useState(
@@ -46,9 +47,11 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
     setSaving(true);
     try {
       const cleanEmpId = employeeId.replace(/^'+/, '').trim().toUpperCase();
+      const cleanAttdId = attdId.replace(/^'+/, '').trim();
       if (isCreate) {
         await api.createEmployee({
           employeeId: cleanEmpId,
+          attdId: cleanAttdId,
           name: name.trim(),
           email: `${cleanEmpId.toLowerCase()}@halagel.com`,
           department,
@@ -59,6 +62,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
       } else {
         await api.updateEmployee(employee.employeeId, {
           employeeId: cleanEmpId,
+          attdId: cleanAttdId,
           name: name.trim(),
           email: employee.email || `${cleanEmpId.toLowerCase()}@halagel.com`,
           department,
@@ -75,63 +79,78 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#182234] border border-slate-700/80 rounded-3xl p-6 max-w-md w-full shadow-2xl">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl text-slate-900">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <div className="flex items-center gap-2">
-            {isCreate ? <UserPlus className="w-5 h-5 text-emerald-400" /> : <UserCheck className="w-5 h-5 text-emerald-400" />}
-            <h3 className="text-base font-bold text-white">
+            {isCreate ? <UserPlus className="w-5 h-5 text-emerald-600" /> : <UserCheck className="w-5 h-5 text-emerald-600" />}
+            <h3 className="text-base font-bold text-slate-900">
               {isCreate ? 'Daftar Kakitangan Baharu' : 'Kemaskini Maklumat Kakitangan'}
             </h3>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:text-slate-700 transition">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-3.5 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs">
+          <div className="mb-3.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              ID Staf <span className="text-emerald-400 text-[10px] font-normal">(Menyokong angka 0 di hadapan, cth: 0123 / 0045)</span>
-            </label>
-            <input
-              type="text"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              required
-              placeholder="cth: 0123 atau EMP104"
-              className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              💡 Sistem akan menghantar format teks (<code>'0123</code>) secara automatik ke Google Sheets supaya angka <code>0</code> di hadapan tidak hilang.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                ID Staf <span className="text-emerald-700 text-[10px] font-normal">(Log Masuk)</span>
+              </label>
+              <input
+                type="text"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                required
+                placeholder="cth: 0123 atau EMP104"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Attd ID <span className="text-amber-800 text-[10px] font-normal">(Eksport Excel)</span>
+              </label>
+              <input
+                type="text"
+                value={attdId}
+                onChange={(e) => setAttdId(e.target.value)}
+                placeholder="cth: 020001 / 004164"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
+              />
+            </div>
           </div>
+          <p className="text-[10px] text-slate-500 -mt-2">
+            💡 <strong>Attd ID</strong> digunakan khusus sebagai lajur <code>Number ID</code> apabila mengeksport fail Excel kehadiran (menyokong angka <code>0</code> di hadapan seperti <code>020001</code>).
+          </p>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">Nama Penuh</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Penuh</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="Nama pekerja"
-              className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Jabatan</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Jabatan</label>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
               >
                 {DEPARTMENTS.map((d) => (
                   <option key={d} value={d}>
@@ -142,11 +161,11 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Pejabat Ditugaskan</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Pejabat Ditugaskan</label>
               <select
                 value={assignedOfficeId}
                 onChange={(e) => setAssignedOfficeId(e.target.value)}
-                className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
               >
                 {offices.map((o) => (
                   <option key={o.officeId} value={o.officeId}>
@@ -159,11 +178,11 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Peranan</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Peranan</label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
               >
                 <option value="employee">Kakitangan (Employee)</option>
                 <option value="admin">Pentadbir (Admin)</option>
@@ -172,12 +191,12 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
 
             {isCreate && (
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Kata Laluan Awal</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Kata Laluan Awal</label>
                 <input
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#0F172A] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
                 />
               </div>
             )}
@@ -187,14 +206,14 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs hover:bg-slate-700 transition"
+              className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs hover:bg-slate-200 transition cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition"
+              className="flex-1 py-2.5 rounded-xl bg-[#588517] hover:bg-[#4c7512] text-white font-bold text-xs transition cursor-pointer shadow-xs"
             >
               {saving ? 'Menyimpan...' : 'Simpan Kakitangan'}
             </button>

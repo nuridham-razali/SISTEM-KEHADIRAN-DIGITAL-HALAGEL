@@ -447,9 +447,12 @@ export const googleSheetsDb = {
       const faceEnrolledAt =
         rawEnrolledAt && rawEnrolledAt !== '-' ? rawEnrolledAt : (prev?.faceEnrolledAt || null);
       const sheetPassword = row[8] ? String(row[8]).trim() : '';
+      const rawAttdId = row[9] != null ? String(row[9]).replace(/^'+/, '').trim() : '';
+      const attdId = rawAttdId && rawAttdId !== '-' ? rawAttdId : (prev?.attdId || '');
 
       return {
         employeeId,
+        attdId,
         name,
         email,
         department,
@@ -591,8 +594,12 @@ export const googleSheetsDb = {
           const localMatch = existingEmployees.find(
             (loc) => loc.employeeId.toUpperCase() === cleanId
           );
+          const cleanAttdId = e.attdId != null
+            ? String(e.attdId).replace(/^'+/, '').trim()
+            : (localMatch?.attdId || '');
           return {
             employeeId: cleanId,
+            attdId: cleanAttdId,
             name: String(e.name || cleanId).trim(),
             email: String(e.email || `${cleanId.toLowerCase()}@halagel.com`).trim(),
             department: String(e.department || 'Pengeluaran & Operasi').trim(),
@@ -887,6 +894,7 @@ export const googleSheetsDb = {
     // Strip large base64 photos so Google Sheets cell stays well below the 50,000-character limit
     const compactEmployees = employees.map((e) => ({
       employeeId: String(e.employeeId ?? '').replace(/^'+/, '').trim().toUpperCase(),
+      attdId: e.attdId ? String(e.attdId).replace(/^'+/, '').trim() : '',
       name: e.name,
       email: e.email,
       department: e.department,
@@ -902,6 +910,7 @@ export const googleSheetsDb = {
     const safeEmployees = compactEmployees.map((e) => ({
       ...e,
       employeeId: formatEmployeeIdForSheet(e.employeeId),
+      attdId: e.attdId ? formatEmployeeIdForSheet(e.attdId) : '',
     }));
 
     const metaJson = JSON.stringify({

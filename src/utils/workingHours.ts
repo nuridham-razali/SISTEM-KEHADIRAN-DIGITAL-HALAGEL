@@ -556,3 +556,51 @@ export function formatWorkedDuration(
   return `${hrs} jam ${mins} minit (${decHours} jam)`;
 }
 
+/**
+ * Formats a clock-in or clock-out timestamp into the exact biometric "Transit time" format:
+ * "YYYY-MM-DD HH:mm:ss" (24-hour format with seconds, e.g. "2026-09-24 08:07:35").
+ */
+export function formatToTransitTime(
+  klTimeStr?: string | null,
+  utcTimeStr?: string | null,
+  fallbackWorkDate?: string | null,
+  sessionId?: string | null
+): string | null {
+  const klDate = parseKLTimeStringToDate(klTimeStr, fallbackWorkDate);
+  const utcDate = utcTimeStr ? new Date(utcTimeStr) : null;
+  const validUtc = utcDate && !isNaN(utcDate.getTime()) ? utcDate : null;
+
+  const baseDate = klDate || validUtc;
+  if (!baseDate) return null;
+
+  const parts = getMalaysiaTimeParts(baseDate);
+  let seconds = parts.second;
+
+  if (seconds === 0 && validUtc) {
+    const utcParts = getMalaysiaTimeParts(validUtc);
+    if (utcParts.second > 0) {
+      seconds = utcParts.second;
+    }
+  }
+
+  if (seconds === 0 && sessionId) {
+    const m = String(sessionId).match(/(\d{10,13})$/);
+    if (m) {
+      const ts = parseInt(m[1], 10);
+      if (!isNaN(ts)) {
+        seconds = new Date(ts).getSeconds();
+      }
+    }
+  }
+
+  const yyyy = String(parts.year).padStart(4, '0');
+  const mm = String(parts.month).padStart(2, '0');
+  const dd = String(parts.day).padStart(2, '0');
+  const hh = String(parts.hour).padStart(2, '0');
+  const min = String(parts.minute).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+}
+
+

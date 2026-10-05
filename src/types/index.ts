@@ -1,5 +1,6 @@
 export interface User {
   employeeId: string;
+  attdId?: string | null;
   name: string;
   email: string;
   department: string;

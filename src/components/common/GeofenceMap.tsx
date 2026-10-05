@@ -218,16 +218,16 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
   const zoomOut = () => mapInstanceRef.current?.zoomOut();
 
   return (
-    <div className={`relative w-full ${heightClass} rounded-2xl overflow-hidden border border-slate-700/80 shadow-inner group`}>
+    <div className={`relative w-full ${heightClass} rounded-2xl overflow-hidden border border-slate-300 shadow-sm group`}>
       {/* Real Map Container */}
       <div ref={mapContainerRef} className="w-full h-full" style={{ zIndex: 1 }} />
 
       {/* Top Left: Office & Status Badge */}
       <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5 pointer-events-none">
-        <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-700/80 text-xs shadow-lg">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_#10B981]" />
-          <span className="text-white font-bold">{office?.name || 'Pejabat Halagel'}</span>
-          <span className="text-slate-400 text-[11px]">({radius}m radius)</span>
+        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-300 text-xs shadow-md">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shadow-[0_0_6px_#10B981]" />
+          <span className="text-slate-900 font-bold">{office?.name || 'Pejabat Halagel'}</span>
+          <span className="text-slate-500 text-[11px]">({radius}m radius)</span>
         </div>
       </div>
 
@@ -237,27 +237,27 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
         <button
           type="button"
           onClick={() => setMapType(mapType === 'streets' ? 'satellite' : 'streets')}
-          className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 backdrop-blur-md text-white px-3 py-1.5 rounded-xl border border-slate-700/80 text-xs font-semibold shadow-lg transition active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 bg-white/95 hover:bg-white backdrop-blur-md text-slate-800 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold shadow-md transition active:scale-95 cursor-pointer"
         >
-          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+          <Layers className="w-3.5 h-3.5 text-emerald-600" />
           <span>{mapType === 'streets' ? '🛰️ Satelit' : '🗺️ Peta'}</span>
         </button>
 
         {/* Zoom In / Out */}
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-xl border border-slate-700/80 overflow-hidden shadow-lg flex flex-col">
+        <div className="bg-white/95 backdrop-blur-md rounded-xl border border-slate-300 overflow-hidden shadow-md flex flex-col">
           <button
             type="button"
             onClick={zoomIn}
-            className="p-2 hover:bg-slate-800 text-white transition active:bg-slate-700"
+            className="p-2 hover:bg-slate-100 text-slate-700 transition active:bg-slate-200 cursor-pointer"
             title="Zum Masuk"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
-          <div className="h-[1px] bg-slate-700" />
+          <div className="h-[1px] bg-slate-200" />
           <button
             type="button"
             onClick={zoomOut}
-            className="p-2 hover:bg-slate-800 text-white transition active:bg-slate-700"
+            className="p-2 hover:bg-slate-100 text-slate-700 transition active:bg-slate-200 cursor-pointer"
             title="Zum Keluar"
           >
             <ZoomOut className="w-4 h-4" />
@@ -268,21 +268,21 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
       {/* Bottom Floating Bar: User Distance & Recenter Actions */}
       <div className="absolute bottom-2.5 left-2.5 right-2.5 z-10 flex items-center justify-between gap-2">
         <div
-          className={`flex items-center gap-2 bg-slate-900/95 backdrop-blur-md px-3 py-1.5 rounded-xl border ${
-            isInsideRadius ? 'border-emerald-500/50' : 'border-amber-500/50'
-          } text-xs shadow-lg`}
+          className={`flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border ${
+            isInsideRadius ? 'border-emerald-500' : 'border-amber-500'
+          } text-xs shadow-md`}
         >
           <span
             className={`w-2.5 h-2.5 rounded-full ${
-              isInsideRadius ? 'bg-blue-400 shadow-[0_0_8px_#60A5FA]' : 'bg-red-400 shadow-[0_0_8px_#F87171]'
+              isInsideRadius ? 'bg-emerald-600 shadow-[0_0_6px_#10B981]' : 'bg-red-500 shadow-[0_0_6px_#EF4444]'
             }`}
           />
-          <span className="text-white font-medium">
-            Jarak: <strong className={isInsideRadius ? 'text-emerald-400' : 'text-amber-400'}>{distanceMeters ?? 0}m</strong>
+          <span className="text-slate-800 font-medium">
+            Jarak: <strong className={isInsideRadius ? 'text-emerald-700' : 'text-amber-700'}>{distanceMeters ?? 0}m</strong>
           </span>
           <span
-            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-              isInsideRadius ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              isInsideRadius ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
             }`}
           >
             {isInsideRadius ? 'DALAM ZON' : 'LUAR RADIUS'}
@@ -295,7 +295,7 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
               type="button"
               onClick={recenterUser}
               title="Pusatkan Lokasi Saya"
-              className="p-2 bg-slate-900/90 hover:bg-slate-800 backdrop-blur-md text-blue-400 rounded-xl border border-slate-700 shadow-lg transition active:scale-95 cursor-pointer"
+              className="p-2 bg-white/95 hover:bg-white backdrop-blur-md text-blue-600 rounded-xl border border-slate-300 shadow-md transition active:scale-95 cursor-pointer"
             >
               <Locate className="w-4 h-4" />
             </button>
@@ -305,7 +305,7 @@ export const GeofenceMap: React.FC<GeofenceMapProps> = ({
             type="button"
             onClick={recenterOffice}
             title="Pusatkan Pejabat"
-            className="p-2 bg-slate-900/90 hover:bg-slate-800 backdrop-blur-md text-emerald-400 rounded-xl border border-slate-700 shadow-lg transition active:scale-95 cursor-pointer"
+            className="p-2 bg-white/95 hover:bg-white backdrop-blur-md text-emerald-700 rounded-xl border border-slate-300 shadow-md transition active:scale-95 cursor-pointer"
           >
             <Building2 className="w-4 h-4" />
           </button>
