@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Halagel Kehadiran</string>
+    <string name="title_activity_main">Halagel Kehadiran</string>
+    <string name="package_name">com.halagel.kehadiran</string>
+    <string name="custom_url_scheme">com.halagel.kehadiran</string>
+</resources>

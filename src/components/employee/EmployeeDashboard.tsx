@@ -6,6 +6,7 @@ import { AttendanceHistory } from './AttendanceHistory';
 import { FaceEnrolment } from './FaceEnrolment';
 import { GeofenceMap } from '../common/GeofenceMap';
 import { LocationPermissionPrompt } from '../common/LocationPermissionPrompt';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
 import { HALAGEL_LOGO } from '../../assets/logo';
 import { getHalagelBackground } from '../../assets/background';
@@ -188,6 +189,7 @@ export const EmployeeDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <PWAInstallButton variant="compact" />
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full text-slate-900 border border-slate-200 shadow-xs">
             <div className="w-6 h-6 rounded-full bg-[#5b7e22] text-white flex items-center justify-center font-bold text-[10px]">
               {initials}
@@ -340,23 +342,31 @@ export const EmployeeDashboard: React.FC = () => {
               </p>
             </div>
 
-            {/* Top Right Floating Profile Capsule */}
-            <div className="hidden lg:flex items-center gap-3 bg-white/95 backdrop-blur-md rounded-full px-4 py-2.5 shadow-md border border-slate-200 text-slate-900">
-              <div className="w-9 h-9 rounded-full bg-[#5b7e22] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                {initials}
+            {/* Top Right Floating Profile Capsule & Install App Button */}
+            <div className="hidden lg:flex items-center gap-3">
+              <PWAInstallButton variant="pill" />
+              <div className="flex items-center gap-3 bg-white/95 backdrop-blur-md rounded-full px-4 py-2.5 shadow-md border border-slate-200 text-slate-900">
+                <div className="w-9 h-9 rounded-full bg-[#5b7e22] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                  {initials}
+                </div>
+                <div className="text-left pr-2">
+                  <div className="text-xs font-bold leading-tight">{fullName}</div>
+                  <div className="text-[10px] text-slate-500 font-medium capitalize">{roleName}</div>
+                </div>
+                <button
+                  onClick={logout}
+                  title="Log Keluar"
+                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-red-500 transition cursor-pointer ml-1"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
-              <div className="text-left pr-2">
-                <div className="text-xs font-bold leading-tight">{fullName}</div>
-                <div className="text-[10px] text-slate-500 font-medium capitalize">{roleName}</div>
-              </div>
-              <button
-                onClick={logout}
-                title="Log Keluar"
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-red-500 transition cursor-pointer ml-1"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
+          </div>
+
+          {/* Optional Native App Install Banner */}
+          <div className="mt-4 max-w-2xl">
+            <PWAInstallButton variant="full" />
           </div>
 
           {/* MAIN HERO CARD: KEHADIRAN HARI INI */}
@@ -685,8 +695,14 @@ export const EmployeeDashboard: React.FC = () => {
         </div>
 
         {/* FOOTER NOTICE / STATUS INFO */}
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-          <span>Halagel (M) Sdn Bhd • Sistem Kehadiran Bersepadu</span>
+        <div className="mt-8 pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+          <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-center sm:text-left">
+            <span>Halagel (M) Sdn Bhd • Sistem Kehadiran Bersepadu</span>
+            <span className="hidden sm:inline">•</span>
+            <span className="text-[11px] text-slate-500">
+              Developed by <strong className="font-semibold text-slate-700">Muhammad Nur Idham Bin Razali</strong>
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setActiveScreen('HISTORY')}

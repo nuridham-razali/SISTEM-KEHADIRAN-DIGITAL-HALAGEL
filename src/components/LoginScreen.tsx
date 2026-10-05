@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { HALAGEL_LOGO } from '../assets/logo';
 import { getHalagelBackground } from '../assets/background';
-import { Eye, EyeOff, User as UserIcon, Lock, ArrowRight, AlertCircle, Smartphone, X } from 'lucide-react';
+import { Eye, EyeOff, User as UserIcon, Lock, ArrowRight, AlertCircle, Smartphone, Apple, Download } from 'lucide-react';
+import { PWAInstallModal } from './common/PWAInstallModal';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 export const LoginScreen: React.FC = () => {
   const { login, isLoading, error, clearError } = useAuth();
+  const { isInstalled, isIOS } = usePWAInstall();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [installTab, setInstallTab] = useState<'android' | 'ios'>(isIOS ? 'ios' : 'android');
   const [bgImage, setBgImage] = useState<string>(getHalagelBackground());
 
   useEffect(() => {
@@ -125,77 +129,61 @@ export const LoginScreen: React.FC = () => {
           </button>
         </form>
 
-        {/* Install on Android Phone Card */}
-        <div className="mt-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-base">📱</span>
-            <div>
-              <div className="font-bold text-emerald-800 text-[11px]">Pasang Pada Telefon Android</div>
-              <div className="text-[10px] text-slate-600">Buka di Chrome & pilih 'Pasang Aplikasi'</div>
+        {/* Install on Android & iOS Native App Card */}
+        {!isInstalled && (
+          <div className="mt-4 p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-200/90 text-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">📲</span>
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">Pasang Sebagai Aplikasi Telefon</div>
+                  <div className="text-[10px] text-slate-600">Sokongan penuh untuk Android & Apple iOS</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setInstallTab('android');
+                  setShowInstallModal(true);
+                }}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-[#588517] hover:bg-[#476c12] text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Pasang Android</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInstallTab('ios');
+                  setShowInstallModal(true);
+                }}
+                className="flex-1 py-1.5 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 transition shadow-xs cursor-pointer"
+              >
+                <Apple className="w-3.5 h-3.5" />
+                <span>Pasang iOS</span>
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowInstallGuide(true)}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-[10px] transition cursor-pointer"
-          >
-            Panduan Pasang
-          </button>
+        )}
+
+        {/* Developed by */}
+        <div className="mt-5 text-center text-xs text-slate-500">
+          <div className="text-[11px] font-medium text-slate-500">
+            Developed by <span className="font-semibold text-slate-800">Muhammad Nur Idham Bin Razali</span>
+          </div>
         </div>
       </div>
 
-      {/* Android Install Guide Modal */}
-      {showInstallGuide && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative space-y-4 text-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
-                <Smartphone className="w-4 h-4 text-emerald-600" />
-                <span>Panduan Pasang di Android</span>
-              </div>
-              <button
-                onClick={() => setShowInstallGuide(false)}
-                className="p-1 rounded-lg bg-slate-100 text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-slate-600">
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
-                  1
-                </span>
-                <p>Buka pautan aplikasi di pelayar <strong>Google Chrome</strong> telefon anda.</p>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
-                  2
-                </span>
-                <p>Tekan butang menu tiga titik <strong>(⋮)</strong> di bahagian atas kanan skrin Chrome.</p>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
-                  3
-                </span>
-                <p>Pilih <strong>"Pasang Aplikasi"</strong> (Install App) atau <strong>"Tambah ke Skrin Utama"</strong> (Add to Home screen).</p>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center shrink-0 text-[11px]">
-                  4
-                </span>
-                <p>Ikon <strong>Halagel Kehadiran</strong> akan terpapar di skrin telefon anda seperti aplikasi natif.</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowInstallGuide(false)}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
-            >
-              Faham, Tutup Panduan
-            </button>
-          </div>
-        </div>
+      {/* Unified PWA Install Modal (Android & iOS) */}
+      {showInstallModal && (
+        <PWAInstallModal
+          isOpen={showInstallModal}
+          onClose={() => setShowInstallModal(false)}
+          defaultTab={installTab}
+        />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { AttendanceProvider } from './context/AttendanceContext';
 import { LoginScreen } from './components/LoginScreen';
 import { EmployeeDashboard } from './components/employee/EmployeeDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { OfflineIndicator } from './components/common/OfflineIndicator';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -87,6 +88,7 @@ export function App() {
     <ErrorBoundary>
       <AuthProvider>
         <AppContent />
+        <OfflineIndicator />
       </AuthProvider>
     </ErrorBoundary>
   );

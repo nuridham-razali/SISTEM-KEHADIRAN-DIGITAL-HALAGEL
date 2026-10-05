@@ -8,6 +8,7 @@ import { CorrectionModal } from './CorrectionModal';
 import { ImportEmployeesModal } from './ImportEmployeesModal';
 import { GoogleSheetsDbManager } from './GoogleSheetsDbManager';
 import { BackgroundSettingModal } from './BackgroundSettingModal';
+import { PWAInstallButton } from '../common/PWAInstallButton';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
 import { HALAGEL_LOGO } from '../../assets/logo';
 import { getHalagelBackground } from '../../assets/background';
@@ -203,7 +204,8 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-center">
+          <div className="flex items-center gap-2 self-end sm:self-center flex-wrap justify-end">
+            <PWAInstallButton variant="pill" />
             <button
               onClick={() => setShowBgModal(true)}
               title="Tetapan Imej Latar Belakang (Base64)"
@@ -843,6 +845,14 @@ export const AdminDashboard: React.FC = () => {
           onBackgroundChange={(newBg) => setBgImage(newBg)}
         />
       )}
+
+      {/* Admin Footer */}
+      <div className="mt-12 pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+        <span>Halagel (M) Sdn Bhd • Portal Pentadbir Kehadiran</span>
+        <span className="text-[11px] text-slate-500">
+          Developed by <strong className="font-semibold text-slate-700">Muhammad Nur Idham Bin Razali</strong>
+        </span>
+      </div>
       </div>
     </div>
   );
