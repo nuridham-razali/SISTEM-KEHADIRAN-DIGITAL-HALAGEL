@@ -1,6 +1,12 @@
 import { AttendanceRecord, User, Office } from '../types';
 import { DEFAULT_APPS_SCRIPT_URL } from '../config/database';
-import { parseKLTimeStringToDate, computeDurationFromKLTimes, formatDateToDMY, formatDateTimeToDMY } from '../utils/workingHours';
+import {
+  parseKLTimeStringToDate,
+  computeDurationFromKLTimes,
+  formatDateToDMY,
+  formatDateTimeToDMY,
+  getMalaysiaDateDMY,
+} from '../utils/workingHours';
 
 const SPREADSHEET_KEY = 'halagel_sheets_id_v2';
 const SPREADSHEET_INFO_KEY = 'halagel_sheets_info_v2';
@@ -69,6 +75,17 @@ function formatEmployeeIdForSheet(empId: string): string {
     return `'${clean}`;
   }
   return clean;
+}
+
+/**
+ * Formats text for writing to Google Sheets with a leading apostrophe so Google Sheets
+ * NEVER converts or misinterprets dates, times, or custom text (preventing US locale date flip).
+ */
+function formatTextForSheet(val?: string | null): string {
+  if (!val) return '';
+  const clean = String(val).replace(/^'+/, '').trim();
+  if (!clean) return '';
+  return `'${clean}`;
 }
 
 function normalizeWorkDate(val: any): string {
@@ -245,10 +262,22 @@ export const googleSheetsDb = {
       const sessionId = String(row[0] || `ATT-SHEET-${index}`).trim();
       const prev = localMap.get(sessionId);
 
+      // Extract authentic timestamp from sessionId (ATT-<timestamp>) which is 100% immune to Google Sheets locale flips
+      const sessionMatch = sessionId.match(/ATT-(\d{10,13})/);
+      let sessionUtcDate: Date | null = null;
+      let sessionDateKL = '';
+      if (sessionMatch) {
+        const ts = parseInt(sessionMatch[1], 10);
+        if (!isNaN(ts) && ts > 1577836800000) {
+          sessionUtcDate = new Date(ts);
+          sessionDateKL = getMalaysiaDateDMY(sessionUtcDate);
+        }
+      }
+
       const employeeId = normalizeSheetEmployeeId(row[1] || prev?.employeeId || '', existingEmployees);
       const employeeName = String(row[2] || prev?.employeeName || '').trim();
       const department = String(row[3] || prev?.department || '').trim();
-      const workDate = normalizeWorkDate(row[4] || prev?.workDate);
+      const workDate = sessionDateKL || prev?.workDate || normalizeWorkDate(row[4]);
       const clockInTimeKL = formatSheetTime(row[5], workDate) || prev?.clockInTimeKL || `${workDate}, 08:30:00 AM`;
 
       const rawOut = String(row[6] ?? '').trim();
@@ -294,6 +323,9 @@ export const googleSheetsDb = {
 
         const parsedInDate = parseKLTimeStringToDate(clockInTimeKL, workDate);
         const parsedOutDate = isStillOpen ? null : parseKLTimeStringToDate(clockOutTimeKL, workDate);
+        const effectiveInUtc = sessionUtcDate
+          ? sessionUtcDate.toISOString()
+          : (parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()));
 
         return {
           sessionId,
@@ -302,7 +334,7 @@ export const googleSheetsDb = {
           department,
           officeId,
           workDate,
-          clockInTimeUTC: parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()),
+          clockInTimeUTC: effectiveInUtc,
           clockInTimeKL,
           clockOutTimeUTC: isStillOpen
             ? undefined
@@ -360,6 +392,9 @@ export const googleSheetsDb = {
 
       const parsedInDate = parseKLTimeStringToDate(clockInTimeKL, workDate);
       const parsedOutDate = isStillOpen ? null : parseKLTimeStringToDate(clockOutTimeKL, workDate);
+      const effectiveInUtc = sessionUtcDate
+        ? sessionUtcDate.toISOString()
+        : (parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()));
 
       return {
         sessionId,
@@ -368,7 +403,7 @@ export const googleSheetsDb = {
         department,
         officeId,
         workDate,
-        clockInTimeUTC: parsedInDate ? parsedInDate.toISOString() : (prev?.clockInTimeUTC || new Date().toISOString()),
+        clockInTimeUTC: effectiveInUtc,
         clockInTimeKL,
         clockOutTimeUTC: isStillOpen
           ? undefined
@@ -873,6 +908,9 @@ export const googleSheetsDb = {
     const safeRecord = {
       ...record,
       employeeId: formatEmployeeIdForSheet(record.employeeId),
+      workDate: formatTextForSheet(record.workDate),
+      clockInTimeKL: formatTextForSheet(record.clockInTimeKL),
+      clockOutTimeKL: record.clockOutTimeKL ? formatTextForSheet(record.clockOutTimeKL) : undefined,
     };
     await this.postToAppsScript(webhookUrl, { action: 'SAVE_ATTENDANCE', record: safeRecord });
   },
@@ -889,6 +927,9 @@ export const googleSheetsDb = {
       .map((r) => ({
         ...r,
         employeeId: formatEmployeeIdForSheet(r.employeeId),
+        workDate: formatTextForSheet(r.workDate),
+        clockInTimeKL: formatTextForSheet(r.clockInTimeKL),
+        clockOutTimeKL: r.clockOutTimeKL ? formatTextForSheet(r.clockOutTimeKL) : undefined,
       }));
 
     // Strip large base64 photos so Google Sheets cell stays well below the 50,000-character limit

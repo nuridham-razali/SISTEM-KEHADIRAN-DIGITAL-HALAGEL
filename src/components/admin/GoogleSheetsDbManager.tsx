@@ -68,11 +68,17 @@ function doPost(e) {
       "Outstation", "Lokasi Outstation", "Jarak Geofens (m)",
       "Pengesahan Wajah", "Nota Pengecualian", "Cawangan", "Kemaskini"
     ]);
+    function forceText(val) {
+      if (!val || val === "-") return "-";
+      var s = String(val).trim();
+      return s.charAt(0) === "'" ? s : ("'" + s);
+    }
+
     if (payload.records && payload.records.length > 0) {
       payload.records.forEach(function(r) {
         attSheet.appendRow([
-          r.sessionId, r.employeeId, r.employeeName, r.department, r.workDate,
-          r.clockInTimeKL, r.clockOutTimeKL || "Belum Keluar",
+          r.sessionId, r.employeeId, r.employeeName, r.department, forceText(r.workDate),
+          forceText(r.clockInTimeKL), r.clockOutTimeKL ? forceText(r.clockOutTimeKL) : "Belum Keluar",
           r.entryType || "Datang Bekerja", r.clockInRemarks || "-",
           r.exitType || "-", r.clockOutRemarks || "-",
           r.attendanceStatus, r.workedHours ? (r.workedHours + " jam") : "-",
@@ -124,9 +130,14 @@ function doPost(e) {
         break;
       }
     }
+    function forceText(val) {
+      if (!val || val === "-") return "-";
+      var s = String(val).trim();
+      return s.charAt(0) === "'" ? s : ("'" + s);
+    }
     var rowValues = [
-      r.sessionId, r.employeeId, r.employeeName, r.department, r.workDate,
-      r.clockInTimeKL, r.clockOutTimeKL || "Belum Keluar",
+      r.sessionId, r.employeeId, r.employeeName, r.department, forceText(r.workDate),
+      forceText(r.clockInTimeKL), r.clockOutTimeKL ? forceText(r.clockOutTimeKL) : "Belum Keluar",
       r.entryType || "Datang Bekerja", r.clockInRemarks || "-",
       r.exitType || "-", r.clockOutRemarks || "-",
       r.attendanceStatus, r.workedHours ? (r.workedHours + " jam") : "-",

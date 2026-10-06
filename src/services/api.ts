@@ -212,7 +212,30 @@ class HalagelApiService {
   private getAttendanceList(): AttendanceRecord[] {
     const list = loadItem(STORAGE_KEYS.ATTENDANCE, DEFAULT_ATTENDANCE);
     let repaired = false;
+
+    // 1. Reconcile workDate and format dates
     list.forEach((rec) => {
+      // If sessionId has ATT-<timestamp>, verify and repair workDate if Google Sheets locale swapped month/day
+      const m = rec.sessionId?.match(/ATT-(\d{10,13})/);
+      if (m) {
+        const ts = parseInt(m[1], 10);
+        if (!isNaN(ts) && ts > 1577836800000) {
+          const trueDateKL = getMalaysiaDateDMY(new Date(ts));
+          if (rec.workDate && rec.workDate !== trueDateKL) {
+            const curDMY = formatDateToDMY(rec.workDate);
+            // If the date is swapped (e.g. 10/06/2026 vs 06/10/2026) or invalid, repair to true Malaysia date
+            if (curDMY !== trueDateKL || isSameWorkDate(curDMY, trueDateKL)) {
+              rec.workDate = trueDateKL;
+              repaired = true;
+            }
+          }
+          if (!rec.workDate) {
+            rec.workDate = trueDateKL;
+            repaired = true;
+          }
+        }
+      }
+
       if (rec.workDate) {
         const dmyDate = formatDateToDMY(rec.workDate);
         if (rec.workDate !== dmyDate) {
@@ -247,10 +270,48 @@ class HalagelApiService {
         }
       }
     });
+
+    // 2. Deduplicate accidental double clock-ins (multiple open sessions for the same employee)
+    const openSessionsByEmp = new Map<string, AttendanceRecord[]>();
+    list.forEach((r) => {
+      if (!r.clockOutTimeKL && !r.clockOutTimeUTC) {
+        const empKey = String(r.employeeId || '').replace(/^'+/, '').trim().toUpperCase();
+        if (!openSessionsByEmp.has(empKey)) {
+          openSessionsByEmp.set(empKey, []);
+        }
+        openSessionsByEmp.get(empKey)!.push(r);
+      }
+    });
+
+    const duplicateSessionIdsToRemove = new Set<string>();
+    openSessionsByEmp.forEach((openSessions) => {
+      if (openSessions.length > 1) {
+        // Sort chronologically by timestamp
+        openSessions.sort((a, b) => {
+          const tsA = parseInt(a.sessionId?.match(/(\d{10,13})/)?.[1] || '0', 10);
+          const tsB = parseInt(b.sessionId?.match(/(\d{10,13})/)?.[1] || '0', 10);
+          return tsA - tsB;
+        });
+        // Keep the earliest clock-in session, prune accidental duplicate open sessions for the same date
+        const keeper = openSessions[0];
+        for (let i = 1; i < openSessions.length; i++) {
+          const dup = openSessions[i];
+          if (isSameWorkDate(dup.workDate, keeper.workDate)) {
+            duplicateSessionIdsToRemove.add(dup.sessionId);
+            repaired = true;
+          }
+        }
+      }
+    });
+
+    const finalList = duplicateSessionIdsToRemove.size > 0
+      ? list.filter((r) => !duplicateSessionIdsToRemove.has(r.sessionId))
+      : list;
+
     if (repaired) {
-      saveItem(STORAGE_KEYS.ATTENDANCE, list);
+      saveItem(STORAGE_KEYS.ATTENDANCE, finalList);
     }
-    return list;
+    return finalList;
   }
 
   private saveAttendanceList(list: AttendanceRecord[]) {
@@ -472,10 +533,18 @@ class HalagelApiService {
     const todayStr = getMalaysiaDateDMY(now);
 
     const userRecords = allRecords.filter((r) => this.isSameEmployeeId(r.employeeId, user.employeeId));
-    const todayRecords = userRecords.filter((r) => isSameWorkDate(r.workDate, todayStr));
+    let todayRecords = userRecords.filter((r) => isSameWorkDate(r.workDate, todayStr));
 
-    // Open session is strictly any session today where clock-out has not occurred yet
-    const openSession = todayRecords.find((r) => !r.clockOutTimeKL && !r.clockOutTimeUTC) || null;
+    // Open session: find any unclosed session for this employee (prioritize today's, then any active unclosed session)
+    const openSession =
+      todayRecords.find((r) => !r.clockOutTimeKL && !r.clockOutTimeUTC) ||
+      userRecords.find((r) => !r.clockOutTimeKL && !r.clockOutTimeUTC) ||
+      null;
+
+    // If an open session exists, ensure it is present in todayRecords and at the top
+    if (openSession && !todayRecords.some((r) => r.sessionId === openSession.sessionId)) {
+      todayRecords.unshift(openSession);
+    }
 
     const timeKLString = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Kuala_Lumpur',
@@ -577,6 +646,27 @@ class HalagelApiService {
       );
     }
 
+    // Check if employee ALREADY has an active open session
+    const records = this.getAttendanceList();
+    const existingOpen = records.find(
+      (r) => this.isSameEmployeeId(r.employeeId, user.employeeId) && !r.clockOutTimeKL && !r.clockOutTimeUTC
+    );
+
+    if (existingOpen) {
+      // Employee is already clocked in! Update remarks/outstation location if provided, but DO NOT duplicate
+      if (payload.remarks && !existingOpen.clockInRemarks) {
+        existingOpen.clockInRemarks = payload.remarks;
+      }
+      if (isOut && !existingOpen.isOutstation) {
+        existingOpen.isOutstation = true;
+        existingOpen.outstationLocation = payload.outstationLocation || null;
+      }
+      this.lastMutationTime = Date.now();
+      this.saveAttendanceList(records);
+      this.notifyListeners();
+      return existingOpen;
+    }
+
     const now = new Date();
     const dateKL = getMalaysiaDateDMY(now);
     const evalIn = evaluateClockIn(now);
@@ -609,7 +699,6 @@ class HalagelApiService {
     };
 
     this.lastMutationTime = Date.now();
-    const records = this.getAttendanceList();
     records.unshift(newRecord);
     this.saveAttendanceList(records);
 

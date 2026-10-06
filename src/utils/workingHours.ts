@@ -386,11 +386,29 @@ export function formatDateToDMY(val?: string | null): string {
 }
 
 /**
- * Compares two workDate strings regardless of whether one is YYYY-MM-DD and the other is DD/MM/YYYY.
+ * Compares two workDate strings regardless of whether one is YYYY-MM-DD and the other is DD/MM/YYYY,
+ * including auto-detecting and reconciling dates where Google Sheets US locale swapped day and month.
  */
 export function isSameWorkDate(dateA?: string | null, dateB?: string | null): boolean {
   if (!dateA || !dateB) return false;
-  return formatDateToDMY(dateA) === formatDateToDMY(dateB);
+  const dmyA = formatDateToDMY(dateA);
+  const dmyB = formatDateToDMY(dateB);
+  if (dmyA === dmyB) return true;
+
+  // Handle case where Google Sheets US locale swapped day & month (e.g. 06/10/2026 vs 10/06/2026)
+  const partsA = dmyA.split('/');
+  const partsB = dmyB.split('/');
+  if (
+    partsA.length === 3 &&
+    partsB.length === 3 &&
+    partsA[2] === partsB[2] && // same year
+    partsA[0] === partsB[1] && // day A === month B
+    partsA[1] === partsB[0] // month A === day B
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

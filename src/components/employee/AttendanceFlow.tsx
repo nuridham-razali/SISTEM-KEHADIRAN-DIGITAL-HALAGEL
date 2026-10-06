@@ -280,6 +280,9 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
           await api.clockOut(payload);
         }
 
+        // Notify parent immediately so background dashboard and context update state right away
+        onSuccess();
+
         setTimeout(() => {
           setIsRecognizing(false);
           setCurrentStep(3);
@@ -387,7 +390,12 @@ export const AttendanceFlow: React.FC<AttendanceFlowProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (currentStep === 3) {
+                onSuccess();
+              }
+              onClose();
+            }}
             className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
