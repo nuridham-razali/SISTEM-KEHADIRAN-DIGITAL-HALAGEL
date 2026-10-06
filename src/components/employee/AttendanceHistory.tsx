@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { AttendanceRecord } from '../../types';
 import { formatWorkedDuration, formatDateToDMY } from '../../utils/workingHours';
-import { ArrowLeft, Calendar, Clock, Car, Briefcase, Coffee, Home, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Car, Briefcase, Coffee, Home, CheckCircle2, Download } from 'lucide-react';
+import { ExportAttendanceExcelModal } from '../admin/ExportAttendanceExcelModal';
 
 interface AttendanceHistoryProps {
   onBack: () => void;
@@ -12,6 +13,7 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('ALL');
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -47,17 +49,28 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col p-4 sm:p-6 max-w-2xl mx-auto font-sans">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={onBack}
-          className="p-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs transition cursor-pointer"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-xl font-black text-slate-900">Sejarah Kehadiran</h1>
-          <p className="text-xs text-slate-500">Halagel (M) Sdn Bhd • Rekod Pergerakan Keluar & Masuk</p>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="p-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs transition cursor-pointer"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-xl font-black text-slate-900">Sejarah Kehadiran</h1>
+            <p className="text-xs text-slate-500">Halagel (M) Sdn Bhd • Rekod Pergerakan Keluar & Masuk</p>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowExportModal(true)}
+          className="px-3 py-2 rounded-xl bg-[#5b7e22] hover:bg-[#4d6b1d] text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer shrink-0"
+        >
+          <Download className="w-4 h-4" />
+          <span className="hidden sm:inline">Eksport Excel</span>
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -213,6 +226,13 @@ export const AttendanceHistory: React.FC<AttendanceHistoryProps> = ({ onBack }) 
             </div>
           ))}
         </div>
+      )}
+      {showExportModal && (
+        <ExportAttendanceExcelModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          records={records}
+        />
       )}
     </div>
   );

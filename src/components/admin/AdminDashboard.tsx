@@ -8,11 +8,13 @@ import { CorrectionModal } from './CorrectionModal';
 import { ImportEmployeesModal } from './ImportEmployeesModal';
 import { GoogleSheetsDbManager } from './GoogleSheetsDbManager';
 import { BackgroundSettingModal } from './BackgroundSettingModal';
+import { ExportAttendanceExcelModal } from './ExportAttendanceExcelModal';
 import { PWAInstallButton } from '../common/PWAInstallButton';
 import { googleSheetsDb } from '../../services/googleSheetsDb';
 import { HALAGEL_LOGO } from '../../assets/logo';
 import { getHalagelBackground } from '../../assets/background';
 import { formatWorkedDuration, formatDateToDMY, formatDateTimeToDMY } from '../../utils/workingHours';
+import { HALAGEL_DEPARTMENTS } from '../../config/departments';
 import {
   Building2,
   Users,
@@ -47,6 +49,7 @@ export const AdminDashboard: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [deptFilter, setDeptFilter] = useState('ALL');
 
   // Modals
   const [editingOffice, setEditingOffice] = useState<Office | null | 'CREATE'>(null);
@@ -60,6 +63,7 @@ export const AdminDashboard: React.FC = () => {
   const [payrollPreview, setPayrollPreview] = useState<any>(null);
   const [bgImage, setBgImage] = useState<string>(getHalagelBackground());
   const [showBgModal, setShowBgModal] = useState(false);
+  const [showExportExcelModal, setShowExportExcelModal] = useState(false);
 
   useEffect(() => {
     setBgImage(getHalagelBackground());
@@ -125,7 +129,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleExportAttendanceExcel = () => {
-    api.exportAttendanceExcel(filteredRecords.length > 0 ? filteredRecords : records);
+    setShowExportExcelModal(true);
   };
 
   const handleExportCsv = async () => {
@@ -168,7 +172,25 @@ export const AdminDashboard: React.FC = () => {
       (statusFilter === 'OUTSTATION' && (r.isOutstation || r.attendanceStatus === 'OUTSTATION')) ||
       (statusFilter === 'EXCEPTION' && (r.attendanceStatus.startsWith('EXCEPTION_') || r.attendanceStatus === 'LAMBAT'));
 
-    return matchSearch && matchStatus;
+    const matchDept =
+      deptFilter === 'ALL' ||
+      r.department.toLowerCase() === deptFilter.toLowerCase();
+
+    return matchSearch && matchStatus && matchDept;
+  });
+
+  const filteredEmployees = employees.filter((emp) => {
+    const matchSearch =
+      !searchQuery ||
+      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.department.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchDept =
+      deptFilter === 'ALL' ||
+      emp.department.toLowerCase() === deptFilter.toLowerCase();
+
+    return matchSearch && matchDept;
   });
 
   return (
@@ -415,25 +437,43 @@ export const AdminDashboard: React.FC = () => {
       {/* TAB 2: ATTENDANCE */}
       {activeTab === 'ATTENDANCE' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-72">
+          <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Cari nama, ID staf, atau jabatan..."
+                  placeholder="Cari nama, ID staf..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-xs"
                 />
               </div>
+
+              {/* Department Selector Filter */}
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-emerald-500 shadow-xs"
+                  title="Tapis mengikut Jabatan"
+                >
+                  <option value="ALL">Semua Jabatan ({HALAGEL_DEPARTMENTS.length})</option>
+                  {HALAGEL_DEPARTMENTS.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 type="button"
                 onClick={handleExportAttendanceExcel}
-                className="px-3.5 py-2 rounded-xl bg-[#588517] hover:bg-[#4c7512] text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-xs"
+                className="px-3 py-2 rounded-xl bg-[#588517] hover:bg-[#4c7512] text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-xs"
               >
                 <Download className="w-4 h-4" />
-                <span>Eksport ke Excel (.xlsx)</span>
+                <span>Eksport Excel</span>
               </button>
             </div>
 
@@ -632,8 +672,54 @@ export const AdminDashboard: React.FC = () => {
             </div>
           )}
 
+          {/* Search & Department Filter Bar for Employees */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Cari nama, ID staf..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 shadow-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-emerald-500 shadow-xs"
+                title="Tapis mengikut Jabatan"
+              >
+                <option value="ALL">Semua Jabatan ({HALAGEL_DEPARTMENTS.length})</option>
+                {HALAGEL_DEPARTMENTS.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              {(searchQuery || deptFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setDeptFilter('ALL');
+                  }}
+                  className="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {employees.map((emp) => (
+            {filteredEmployees.length === 0 ? (
+              <div className="col-span-full text-center py-8 bg-white rounded-2xl border border-slate-200 p-6 text-slate-500 text-xs shadow-xs">
+                Tiada kakitangan dijumpai untuk padanan ini.
+              </div>
+            ) : (
+              filteredEmployees.map((emp) => (
               <div
                 key={emp.employeeId}
                 className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-sm transition flex flex-col justify-between text-slate-800"
@@ -679,7 +765,7 @@ export const AdminDashboard: React.FC = () => {
                   )}
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -843,6 +929,14 @@ export const AdminDashboard: React.FC = () => {
         <BackgroundSettingModal
           onClose={() => setShowBgModal(false)}
           onBackgroundChange={(newBg) => setBgImage(newBg)}
+        />
+      )}
+
+      {showExportExcelModal && (
+        <ExportAttendanceExcelModal
+          isOpen={showExportExcelModal}
+          onClose={() => setShowExportExcelModal(false)}
+          records={records}
         />
       )}
 

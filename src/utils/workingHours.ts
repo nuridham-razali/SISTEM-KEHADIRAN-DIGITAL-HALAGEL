@@ -621,4 +621,61 @@ export function formatToTransitTime(
   return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
 }
 
+/**
+ * Extracts normalized { year, month (1-12), day (1-31) } from an AttendanceRecord,
+ * with resilience against varied date formats, locale quirks, and sessionId timestamps.
+ */
+export function extractRecordDateParts(rec: {
+  workDate?: string | null;
+  sessionId?: string | null;
+  clockInTimeUTC?: string | null;
+  clockInTimeKL?: string | null;
+}): { year: number; month: number; day: number } | null {
+  // 1. Session ID timestamp (ATT-<13-digit-timestamp>) is 100% immune to string formatting errors
+  if (rec.sessionId) {
+    const m = String(rec.sessionId).match(/ATT-(\d{10,13})/);
+    if (m) {
+      const ts = parseInt(m[1], 10);
+      if (!isNaN(ts) && ts > 1577836800000) {
+        const parts = getMalaysiaTimeParts(new Date(ts));
+        return { year: parts.year, month: parts.month, day: parts.day };
+      }
+    }
+  }
+
+  // 2. Parse from workDate
+  if (rec.workDate) {
+    const dmy = formatDateToDMY(rec.workDate);
+    const m = dmy.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      const d = parseInt(m[1], 10);
+      const mon = parseInt(m[2], 10);
+      const y = parseInt(m[3], 10);
+      if (mon >= 1 && mon <= 12 && d >= 1 && d <= 31 && y > 2000) {
+        return { year: y, month: mon, day: d };
+      }
+    }
+  }
+
+  // 3. Parse from clockInTimeUTC
+  if (rec.clockInTimeUTC) {
+    const d = new Date(rec.clockInTimeUTC);
+    if (!isNaN(d.getTime())) {
+      const parts = getMalaysiaTimeParts(d);
+      return { year: parts.year, month: parts.month, day: parts.day };
+    }
+  }
+
+  // 4. Parse from clockInTimeKL
+  if (rec.clockInTimeKL) {
+    const parsed = parseKLTimeStringToDate(rec.clockInTimeKL, rec.workDate);
+    if (parsed) {
+      const parts = getMalaysiaTimeParts(parsed);
+      return { year: parts.year, month: parts.month, day: parts.day };
+    }
+  }
+
+  return null;
+}
+
 

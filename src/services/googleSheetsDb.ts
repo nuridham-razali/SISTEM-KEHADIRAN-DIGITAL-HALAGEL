@@ -7,6 +7,7 @@ import {
   formatDateTimeToDMY,
   getMalaysiaDateDMY,
 } from '../utils/workingHours';
+import { normalizeDepartmentName } from '../config/departments';
 
 const SPREADSHEET_KEY = 'halagel_sheets_id_v2';
 const SPREADSHEET_INFO_KEY = 'halagel_sheets_info_v2';
@@ -276,7 +277,7 @@ export const googleSheetsDb = {
 
       const employeeId = normalizeSheetEmployeeId(row[1] || prev?.employeeId || '', existingEmployees);
       const employeeName = String(row[2] || prev?.employeeName || '').trim();
-      const department = String(row[3] || prev?.department || '').trim();
+      const department = normalizeDepartmentName(String(row[3] || prev?.department || ''));
       const workDate = sessionDateKL || prev?.workDate || normalizeWorkDate(row[4]);
       const clockInTimeKL = formatSheetTime(row[5], workDate) || prev?.clockInTimeKL || `${workDate}, 08:30:00 AM`;
 
@@ -468,7 +469,7 @@ export const googleSheetsDb = {
         );
       const name = String(row[1] || prev?.name || employeeId).trim();
       const email = String(row[2] || prev?.email || `${employeeId.toLowerCase()}@halagel.com`).trim();
-      const department = String(row[3] || prev?.department || 'Pengeluaran & Operasi').trim();
+      const department = normalizeDepartmentName(String(row[3] || prev?.department || 'Purchasing'));
       const assignedOfficeId = String(row[4] || prev?.assignedOfficeId || 'OFF-01').trim();
       const rawRole = String(row[5] || prev?.role || 'employee').trim().toLowerCase();
       const role = rawRole === 'admin' || rawRole === 'pentadbir' ? 'admin' : 'employee';
@@ -637,7 +638,7 @@ export const googleSheetsDb = {
             attdId: cleanAttdId,
             name: String(e.name || cleanId).trim(),
             email: String(e.email || `${cleanId.toLowerCase()}@halagel.com`).trim(),
-            department: String(e.department || 'Pengeluaran & Operasi').trim(),
+            department: normalizeDepartmentName(String(e.department || 'Purchasing')),
             assignedOfficeId: String(e.assignedOfficeId || 'OFF-01').trim(),
             role: e.role === 'admin' ? 'admin' : 'employee',
             active: e.active ?? true,

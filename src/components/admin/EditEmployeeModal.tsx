@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Office } from '../../types';
 import { api } from '../../services/api';
+import { HALAGEL_DEPARTMENTS, normalizeDepartmentName } from '../../config/departments';
 import { UserPlus, UserCheck, X } from 'lucide-react';
 
 interface EditEmployeeModalProps {
@@ -9,17 +10,6 @@ interface EditEmployeeModalProps {
   onClose: () => void;
   onSaved: () => void;
 }
-
-const DEPARTMENTS = [
-  'Pengeluaran & Operasi Kilang',
-  'Pemasaran & Jualan',
-  'Sumber Manusia & Pentadbiran',
-  'Kewangan & Perakaunan',
-  'Logistik & Rantaian Bekalan',
-  'Kawalan Kualiti (QC/QA)',
-  'Penyelidikan & Pembangunan (R&D)',
-  'Teknologi Maklumat (IT)',
-];
 
 export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   employee,
@@ -32,7 +22,9 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
   const [employeeId, setEmployeeId] = useState(employee?.employeeId || '');
   const [attdId, setAttdId] = useState(employee?.attdId || '');
   const [name, setName] = useState(employee?.name || '');
-  const [department, setDepartment] = useState(employee?.department || DEPARTMENTS[0]);
+  const [department, setDepartment] = useState(
+    employee?.department ? normalizeDepartmentName(employee.department) : HALAGEL_DEPARTMENTS[0]
+  );
   const [assignedOfficeId, setAssignedOfficeId] = useState(
     employee?.assignedOfficeId || offices[0]?.officeId || 'OFF-01'
   );
@@ -152,7 +144,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500 shadow-xs"
               >
-                {DEPARTMENTS.map((d) => (
+                {HALAGEL_DEPARTMENTS.map((d) => (
                   <option key={d} value={d}>
                     {d}
                   </option>

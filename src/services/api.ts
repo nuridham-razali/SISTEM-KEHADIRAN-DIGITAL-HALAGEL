@@ -11,8 +11,22 @@ import {
   formatDateTimeToDMY,
   isSameWorkDate,
   formatToTransitTime,
+  extractRecordDateParts,
 } from '../utils/workingHours';
 import { googleSheetsDb } from './googleSheetsDb';
+import { normalizeDepartmentName } from '../config/departments';
+
+export interface ExportAttendanceExcelOptions {
+  records?: AttendanceRecord[];
+  filterMode?: 'ALL' | 'SPECIFIC_DATE' | 'MONTH_YEAR' | 'YEAR_ONLY' | 'RANGE';
+  selectedDate?: string; // YYYY-MM-DD or DD/MM/YYYY
+  selectedMonth?: number; // 1 to 12
+  selectedYear?: number; // e.g. 2026
+  startDate?: string;
+  endDate?: string;
+  department?: string; // 'ALL' or specific department name
+  formatType?: 'TRANSIT_TIME' | 'DETAILED';
+}
 
 const STORAGE_KEYS = {
   OFFICES: 'halagel_offices_v2_sheets',
@@ -75,7 +89,7 @@ const DEFAULT_EMPLOYEES: (User & { password?: string })[] = [
     employeeId: 'ADMIN',
     name: 'Pentadbir HR Halagel',
     email: 'admin@halagel.com',
-    department: 'Sumber Manusia & Pentadbiran',
+    department: 'HR & Admin',
     assignedOfficeId: 'OFF-01',
     role: 'admin',
     active: true,
@@ -87,7 +101,7 @@ const DEFAULT_EMPLOYEES: (User & { password?: string })[] = [
     employeeId: 'EMP101',
     name: 'Renaldottt',
     email: 'renaldi@example.com',
-    department: 'Pengeluaran & Operasi Kilang',
+    department: 'Softgel',
     assignedOfficeId: 'OFF-01',
     role: 'employee',
     active: true,
@@ -99,7 +113,7 @@ const DEFAULT_EMPLOYEES: (User & { password?: string })[] = [
     employeeId: 'EMP103',
     name: 'Nurul Huda',
     email: 'nurul@halagel.com',
-    department: 'Pemasaran & Jualan',
+    department: 'Sales & Marketing',
     assignedOfficeId: 'OFF-02',
     role: 'employee',
     active: true,
@@ -202,7 +216,21 @@ class HalagelApiService {
   }
 
   private getEmployeesList(): (User & { password?: string })[] {
-    return loadItem(STORAGE_KEYS.EMPLOYEES, DEFAULT_EMPLOYEES);
+    const list = loadItem(STORAGE_KEYS.EMPLOYEES, DEFAULT_EMPLOYEES);
+    let updated = false;
+    list.forEach((e) => {
+      if (e.department) {
+        const norm = normalizeDepartmentName(e.department);
+        if (norm !== e.department) {
+          e.department = norm;
+          updated = true;
+        }
+      }
+    });
+    if (updated) {
+      saveItem(STORAGE_KEYS.EMPLOYEES, list);
+    }
+    return list;
   }
 
   private saveEmployeesList(list: (User & { password?: string })[]) {
@@ -215,6 +243,14 @@ class HalagelApiService {
 
     // 1. Reconcile workDate and format dates
     list.forEach((rec) => {
+      // Normalize department name (e.g. Sales -> Sales & Marketing)
+      if (rec.department) {
+        const norm = normalizeDepartmentName(rec.department);
+        if (norm !== rec.department) {
+          rec.department = norm;
+          repaired = true;
+        }
+      }
       // If sessionId has ATT-<timestamp>, verify and repair workDate if Google Sheets locale swapped month/day
       const m = rec.sessionId?.match(/ATT-(\d{10,13})/);
       if (m) {
@@ -981,7 +1017,7 @@ class HalagelApiService {
       attdId: data.attdId != null ? String(data.attdId).replace(/^'+/, '').trim() : '',
       name: data.name || '',
       email: data.email || '',
-      department: data.department || 'Pengeluaran',
+      department: normalizeDepartmentName(data.department || 'Purchasing'),
       assignedOfficeId: data.assignedOfficeId || 'OFF-01',
       role: data.role || 'employee',
       active: data.active ?? true,
@@ -1016,6 +1052,9 @@ class HalagelApiService {
     }
     if (cleanUpdates.attdId !== undefined) {
       cleanUpdates.attdId = String(cleanUpdates.attdId ?? '').replace(/^'+/, '').trim();
+    }
+    if (cleanUpdates.department) {
+      cleanUpdates.department = normalizeDepartmentName(cleanUpdates.department);
     }
     const oldId = emps[idx].employeeId;
     emps[idx] = { ...emps[idx], ...cleanUpdates };
@@ -1165,83 +1204,285 @@ class HalagelApiService {
     };
   }
 
-  exportAttendanceExcel(customRecords?: AttendanceRecord[]): void {
-    const records = customRecords ?? this.getAttendanceList();
-    const emps = this.getEmployeesList();
+  filterAttendanceRecords(options: ExportAttendanceExcelOptions = {}): AttendanceRecord[] {
+    const records = options.records ?? this.getAttendanceList();
+    const filterMode = options.filterMode || 'ALL';
+    const dept = options.department?.trim();
 
-    const transitRows: Array<{ numberId: string; name: string; transitTime: string }> = [];
-
-    records.forEach((r) => {
-      const emp = emps.find((e) => this.isSameEmployeeId(e.employeeId, r.employeeId));
-      const rawAttdId = emp?.attdId ? String(emp.attdId).replace(/^'+/, '').trim() : '';
-      const numberId = rawAttdId || String(r.employeeId ?? '').replace(/^'+/, '').trim();
-      const name = emp?.name || r.employeeName || '';
-
-      if (r.clockInTimeKL && r.clockInTimeKL !== '-') {
-        const inTransit = formatToTransitTime(
-          r.clockInTimeKL,
-          r.clockInTimeUTC,
-          r.workDate,
-          r.sessionId
-        );
-        if (inTransit) {
-          transitRows.push({
-            numberId,
-            name,
-            transitTime: inTransit,
-          });
+    return records.filter((r) => {
+      // 1. Department filter
+      if (dept && dept !== 'ALL') {
+        const recDeptNorm = normalizeDepartmentName(r.department);
+        const targetDeptNorm = normalizeDepartmentName(dept);
+        if (recDeptNorm.toLowerCase() !== targetDeptNorm.toLowerCase()) {
+          return false;
         }
       }
 
-      if (r.clockOutTimeKL && r.clockOutTimeKL !== '-' && r.clockOutTimeKL !== 'Belum Keluar') {
-        const outTransit = formatToTransitTime(
-          r.clockOutTimeKL,
-          r.clockOutTimeUTC,
-          r.workDate,
-          r.sessionId
-        );
-        if (outTransit) {
-          transitRows.push({
-            numberId,
-            name,
-            transitTime: outTransit,
-          });
-        }
+      // 2. Date mode filter
+      if (filterMode === 'ALL') {
+        return true;
       }
+
+      const dateParts = extractRecordDateParts(r);
+
+      if (filterMode === 'SPECIFIC_DATE' && options.selectedDate) {
+        let targetYear = 0;
+        let targetMonth = 0;
+        let targetDay = 0;
+        if (options.selectedDate.includes('-')) {
+          const [y, m, d] = options.selectedDate.split('-').map(Number);
+          targetYear = y;
+          targetMonth = m;
+          targetDay = d;
+        } else if (options.selectedDate.includes('/')) {
+          const [d, m, y] = options.selectedDate.split('/').map(Number);
+          targetYear = y;
+          targetMonth = m;
+          targetDay = d;
+        }
+
+        if (dateParts && targetYear && targetMonth && targetDay) {
+          if (
+            dateParts.year === targetYear &&
+            dateParts.month === targetMonth &&
+            dateParts.day === targetDay
+          ) {
+            return true;
+          }
+        }
+        return isSameWorkDate(r.workDate, options.selectedDate);
+      }
+
+      if (filterMode === 'MONTH_YEAR') {
+        const targetMonth = Number(options.selectedMonth);
+        const targetYear = Number(options.selectedYear);
+        if (dateParts && targetMonth && targetYear) {
+          return dateParts.month === targetMonth && dateParts.year === targetYear;
+        }
+        return false;
+      }
+
+      if (filterMode === 'YEAR_ONLY') {
+        const targetYear = Number(options.selectedYear);
+        if (dateParts && targetYear) {
+          return dateParts.year === targetYear;
+        }
+        return false;
+      }
+
+      if (filterMode === 'RANGE' && (options.startDate || options.endDate)) {
+        if (!dateParts) return false;
+        const recTime = new Date(dateParts.year, dateParts.month - 1, dateParts.day).getTime();
+        if (options.startDate) {
+          const [sy, sm, sd] = options.startDate.split('-').map(Number);
+          const startTime = new Date(sy, sm - 1, sd).getTime();
+          if (recTime < startTime) return false;
+        }
+        if (options.endDate) {
+          const [ey, em, ed] = options.endDate.split('-').map(Number);
+          const endTime = new Date(ey, em - 1, ed, 23, 59, 59, 999).getTime();
+          if (recTime > endTime) return false;
+        }
+        return true;
+      }
+
+      return true;
     });
+  }
 
-    // Sort by Transit time descending (matching the attached screenshot order)
-    transitRows.sort((a, b) => b.transitTime.localeCompare(a.transitTime));
-
-    const sheetData: any[][] = [
-      ['Number ID', 'Name', 'Transit time'],
-      ...transitRows.map((row) => [row.numberId, row.name, row.transitTime]),
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(sheetData);
-
-    // Force "Number ID" and "Transit time" cells to be explicit Excel Text strings ('s')
-    // so leading zeros (e.g. 020001, 004164) and "YYYY-MM-DD HH:mm:ss" are 100% preserved
-    for (let rIdx = 1; rIdx < sheetData.length; rIdx++) {
-      const idCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 0 });
-      if (ws[idCellRef]) {
-        ws[idCellRef].t = 's';
-        ws[idCellRef].v = String(sheetData[rIdx][0] ?? '');
-        ws[idCellRef].z = '@';
-      }
-      const timeCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 2 });
-      if (ws[timeCellRef]) {
-        ws[timeCellRef].t = 's';
-        ws[timeCellRef].v = String(sheetData[rIdx][2] ?? '');
-        ws[timeCellRef].z = '@';
-      }
+  exportAttendanceExcel(
+    optionsOrRecords?: AttendanceRecord[] | ExportAttendanceExcelOptions
+  ): { success: boolean; count: number; filename: string } {
+    let opts: ExportAttendanceExcelOptions = {};
+    if (Array.isArray(optionsOrRecords)) {
+      opts = { records: optionsOrRecords, filterMode: 'ALL' };
+    } else if (optionsOrRecords) {
+      opts = optionsOrRecords;
     }
 
-    ws['!cols'] = [{ wch: 15 }, { wch: 32 }, { wch: 22 }];
+    const filteredRecords = this.filterAttendanceRecords(opts);
+    const emps = this.getEmployeesList();
+    const formatType = opts.formatType || 'TRANSIT_TIME';
+
+    // Construct readable filename reflecting the selected period
+    let timeLabel = 'Semua';
+    if (opts.filterMode === 'SPECIFIC_DATE' && opts.selectedDate) {
+      timeLabel = opts.selectedDate.replace(/[/-]/g, '_');
+    } else if (opts.filterMode === 'MONTH_YEAR' && opts.selectedMonth && opts.selectedYear) {
+      const monthNames = [
+        'Januari', 'Februari', 'Mac', 'April', 'Mei', 'Jun',
+        'Julai', 'Ogos', 'September', 'Oktober', 'November', 'Disember'
+      ];
+      const mName = monthNames[opts.selectedMonth - 1] || `Bulan_${opts.selectedMonth}`;
+      timeLabel = `${mName}_${opts.selectedYear}`;
+    } else if (opts.filterMode === 'YEAR_ONLY' && opts.selectedYear) {
+      timeLabel = `Tahun_${opts.selectedYear}`;
+    } else if (opts.filterMode === 'RANGE' && (opts.startDate || opts.endDate)) {
+      timeLabel = `${opts.startDate || 'Mula'}_hingga_${opts.endDate || 'Akhir'}`;
+    }
+
+    const deptSlug =
+      opts.department && opts.department !== 'ALL'
+        ? `_${opts.department.replace(/[^a-zA-Z0-9]/g, '_')}`
+        : '';
+
+    const formatSlug = formatType === 'DETAILED' ? '_Laporan_Penuh' : '_Transit';
+    const filename = `Halagel_Kehadiran_${timeLabel}${deptSlug}${formatSlug}.xlsx`;
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Kehadiran');
-    XLSX.writeFile(wb, `Halagel_Kehadiran_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    if (formatType === 'TRANSIT_TIME') {
+      const transitRows: Array<{ numberId: string; name: string; transitTime: string }> = [];
+
+      filteredRecords.forEach((r) => {
+        const emp = emps.find((e) => this.isSameEmployeeId(e.employeeId, r.employeeId));
+        const rawAttdId = emp?.attdId ? String(emp.attdId).replace(/^'+/, '').trim() : '';
+        const numberId = rawAttdId || String(r.employeeId ?? '').replace(/^'+/, '').trim();
+        const name = emp?.name || r.employeeName || '';
+
+        if (r.clockInTimeKL && r.clockInTimeKL !== '-') {
+          const inTransit = formatToTransitTime(
+            r.clockInTimeKL,
+            r.clockInTimeUTC,
+            r.workDate,
+            r.sessionId
+          );
+          if (inTransit) {
+            transitRows.push({
+              numberId,
+              name,
+              transitTime: inTransit,
+            });
+          }
+        }
+
+        if (r.clockOutTimeKL && r.clockOutTimeKL !== '-' && r.clockOutTimeKL !== 'Belum Keluar') {
+          const outTransit = formatToTransitTime(
+            r.clockOutTimeKL,
+            r.clockOutTimeUTC,
+            r.workDate,
+            r.sessionId
+          );
+          if (outTransit) {
+            transitRows.push({
+              numberId,
+              name,
+              transitTime: outTransit,
+            });
+          }
+        }
+      });
+
+      // Sort by Transit time descending (matching official biometric punch sequence)
+      transitRows.sort((a, b) => b.transitTime.localeCompare(a.transitTime));
+
+      const sheetData: any[][] = [
+        ['Number ID', 'Name', 'Transit time'],
+        ...transitRows.map((row) => [row.numberId, row.name, row.transitTime]),
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Force "Number ID" and "Transit time" cells to be explicit Excel Text strings ('s')
+      // so leading zeros (e.g. 020001, 004164) and "YYYY-MM-DD HH:mm:ss" are 100% preserved
+      for (let rIdx = 1; rIdx < sheetData.length; rIdx++) {
+        const idCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 0 });
+        if (ws[idCellRef]) {
+          ws[idCellRef].t = 's';
+          ws[idCellRef].v = String(sheetData[rIdx][0] ?? '');
+          ws[idCellRef].z = '@';
+        }
+        const timeCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 2 });
+        if (ws[timeCellRef]) {
+          ws[timeCellRef].t = 's';
+          ws[timeCellRef].v = String(sheetData[rIdx][2] ?? '');
+          ws[timeCellRef].z = '@';
+        }
+      }
+
+      ws['!cols'] = [{ wch: 15 }, { wch: 32 }, { wch: 22 }];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Transit Time');
+      XLSX.writeFile(wb, filename);
+
+      return { success: true, count: transitRows.length, filename };
+    } else {
+      // DETAILED report format
+      const sheetData: any[][] = [
+        [
+          'Number ID',
+          'ID Kakitangan',
+          'Nama',
+          'Jabatan',
+          'Tarikh',
+          'Waktu Masuk',
+          'Waktu Keluar',
+          'Jam Bekerja (Jam)',
+          'Status Kehadiran',
+          'Jenis Masuk / Keluar',
+          'Catatan',
+        ],
+        ...filteredRecords.map((r) => {
+          const emp = emps.find((e) => this.isSameEmployeeId(e.employeeId, r.employeeId));
+          const rawAttdId = emp?.attdId ? String(emp.attdId).replace(/^'+/, '').trim() : '';
+          const numberId = rawAttdId || String(r.employeeId ?? '').replace(/^'+/, '').trim();
+          const jenis = [r.entryType, r.exitType].filter(Boolean).join(' / ');
+          const remarks = [r.clockInRemarks, r.clockOutRemarks, r.exceptionNotes].filter(Boolean).join(' | ');
+
+          return [
+            numberId,
+            r.employeeId,
+            emp?.name || r.employeeName,
+            r.department || emp?.department || '',
+            r.workDate,
+            r.clockInTimeKL || '-',
+            r.clockOutTimeKL || 'Belum Keluar',
+            r.workedHours ?? 0,
+            r.attendanceStatus,
+            jenis || '-',
+            remarks || '-',
+          ];
+        }),
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Force text cells for IDs to preserve leading zeroes
+      for (let rIdx = 1; rIdx < sheetData.length; rIdx++) {
+        const idCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 0 });
+        if (ws[idCellRef]) {
+          ws[idCellRef].t = 's';
+          ws[idCellRef].v = String(sheetData[rIdx][0] ?? '');
+          ws[idCellRef].z = '@';
+        }
+        const empIdCellRef = XLSX.utils.encode_cell({ r: rIdx, c: 1 });
+        if (ws[empIdCellRef]) {
+          ws[empIdCellRef].t = 's';
+          ws[empIdCellRef].v = String(sheetData[rIdx][1] ?? '');
+          ws[empIdCellRef].z = '@';
+        }
+      }
+
+      ws['!cols'] = [
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 30 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 24 },
+        { wch: 35 },
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Laporan Kehadiran');
+      XLSX.writeFile(wb, filename);
+
+      return { success: true, count: filteredRecords.length, filename };
+    }
   }
 
   async exportPayrollCsv(params?: { startDate?: string; endDate?: string }): Promise<string> {

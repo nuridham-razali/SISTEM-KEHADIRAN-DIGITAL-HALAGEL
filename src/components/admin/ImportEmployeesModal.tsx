@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { api } from '../../services/api';
+import { normalizeDepartmentName } from '../../config/departments';
 import { X, Upload, FileText, Download, CheckCircle, AlertTriangle, Users } from 'lucide-react';
 
 interface ImportEmployeesModalProps {
@@ -98,7 +99,7 @@ export const ImportEmployeesModal: React.FC<ImportEmployeesModalProps> = ({ onCl
         attdId: attdIdIdx !== -1 && cols[attdIdIdx] ? cols[attdIdIdx] : undefined,
         name,
         email: emailIdx !== -1 && cols[emailIdx] ? cols[emailIdx] : `${empId.toLowerCase()}@halagel.com`,
-        department: deptIdx !== -1 && cols[deptIdx] ? cols[deptIdx] : 'Pengeluaran & Operasi',
+        department: normalizeDepartmentName(deptIdx !== -1 && cols[deptIdx] ? cols[deptIdx] : 'Purchasing'),
         assignedOfficeId: officeIdx !== -1 && cols[officeIdx] ? cols[officeIdx] : 'OFF-01',
         role: roleIdx !== -1 && cols[roleIdx]?.toLowerCase() === 'admin' ? 'admin' : 'employee',
         password: passIdx !== -1 && cols[passIdx] ? cols[passIdx] : 'Password123!',
